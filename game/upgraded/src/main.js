@@ -12,9 +12,13 @@ import {
   updateEnemies,
 } from './components/Enemy.js';
 import {
+  ATTACKS,
   clearAttackRequest,
+  cycleAttack,
+  getAttack,
   getAttackReadiness,
   resetAttack,
+  setAttackById,
   setAttackDifficulty,
   updateAttack,
 } from './components/Attack.js';
@@ -96,9 +100,10 @@ document.body.appendChild(levelElement);
 
 const attackMeter = document.createElement('div');
 attackMeter.className = 'attack-meter';
-attackMeter.innerHTML = '<div class="attack-meter-fill"></div><span>Attack</span>';
+attackMeter.innerHTML = '<div class="attack-meter-fill"></div><span></span>';
 document.body.appendChild(attackMeter);
 const attackMeterFill = attackMeter.querySelector('.attack-meter-fill');
+const attackMeterLabel = attackMeter.querySelector('span');
 
 // HUD: XP towards the next in-game upgrade, and shields left
 const runHud = document.createElement('div');
@@ -143,10 +148,25 @@ function modeListHtml() {
   return `<ul class="modes" aria-label="Game mode">${items}</ul>`;
 }
 
+function attackListHtml() {
+  const current = getAttack();
+  const items = ATTACKS.map(
+    (attack) => `
+      <li>
+        <button type="button" data-attack="${attack.id}" aria-pressed="${attack === current}">
+          ${attack.name} <small>${attack.description}</small>
+        </button>
+      </li>`
+  ).join('');
+  return `
+    <p class="list-label" id="attack-label">Attack <kbd>Q</kbd>/<kbd>E</kbd></p>
+    <ul class="modes attacks" aria-labelledby="attack-label">${items}</ul>`;
+}
+
 const CONTROLS_HTML = `
   <p class="controls">
     <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> or <kbd>&larr;</kbd><kbd>&uarr;</kbd><kbd>&darr;</kbd><kbd>&rarr;</kbd> hop
-    &middot; <kbd>Space</kbd> attack
+    &middot; <kbd>Space</kbd> attack (Tongue fires on its own)
     &middot; <kbd>P</kbd> pause
   </p>`;
 
@@ -218,8 +238,9 @@ const UPGRADES_BUTTON_HTML =
   '<button type="button" class="link" data-shop>Upgrades <kbd>U</kbd></button>';
 
 function renderOverlay() {
-  // Keyboard users moving through the mode buttons stay on them after a re-render
-  const modeHadFocus = overlay.contains(document.activeElement) && document.activeElement.dataset.mode !== undefined;
+  // Keyboard users moving through the mode or attack buttons stay on them after a re-render
+  const focused = overlay.contains(document.activeElement) ? document.activeElement.dataset : {};
+  const listFocus = focused.mode !== undefined ? 'mode' : focused.attack !== undefined ? 'attack' : null;
 
   overlay.classList.toggle('game-over', state === 'gameover');
   overlay.hidden = state === 'playing';
@@ -229,6 +250,7 @@ function renderOverlay() {
       <h1 id="overlay-title">Tode's Escape</h1>
       <p>Choose a mode with <kbd>A</kbd>/<kbd>D</kbd>, then press <kbd>Space</kbd> to start</p>
       ${modeListHtml()}
+      ${attackListHtml()}
       <button type="button" class="primary" data-start>Start</button>
       <p class="best">Best in ${getMode().name}: ${getHighScore()}</p>
       <p class="coins">Coins: ${getCoins()} &middot; ${UPGRADES_BUTTON_HTML}</p>
@@ -261,17 +283,18 @@ function renderOverlay() {
       <p class="coins">+${lastRun.coins} coins &middot; ${getCoins()} total &middot; ${UPGRADES_BUTTON_HTML}</p>
       <button type="button" class="primary" data-start>Play again</button>
       <p>Press <kbd>Space</kbd> to play again</p>
-      ${modeListHtml()}`;
+      ${modeListHtml()}
+      ${attackListHtml()}`;
   }
 
-  focusSelection(modeHadFocus);
+  focusSelection(listFocus);
 }
 
 // Put keyboard focus on the current choice, so Tab, Enter and screen readers start from it
-function focusSelection(modeHadFocus) {
+function focusSelection(listFocus) {
   let selector = null;
   if (state === 'start' || state === 'gameover') {
-    selector = modeHadFocus ? '[data-mode][aria-pressed="true"]' : '[data-start]';
+    selector = listFocus ? `[data-${listFocus}][aria-pressed="true"]` : '[data-start]';
   } else if (state === 'shop') {
     selector = `[data-buy="${shopIndex}"]`;
   } else if (state === 'levelup') {
@@ -300,7 +323,7 @@ function startGame() {
   resetRun(getBaseStats());
   resetPlayer();
   resetEnemies(scene);
-  resetAttack();
+  resetAttack(scene);
   resetScore();
   announcedLevel = getLevel(0);
   player.visible = true;
@@ -326,6 +349,15 @@ function selectMode(key) {
   announce(`${getMode().name} mode`);
   renderOverlay();
 }
+
+function selectAttack(id) {
+  setAttackById(id);
+  announce(`${getAttack().name} attack`);
+  renderOverlay();
+}
+
+// Menu keys that move the attack selection back or forward through the list
+const ATTACK_STEPS = { KeyQ: -1, KeyE: 1 };
 
 // Menu keys that move the mode selection back or forward through the list
 const MENU_STEPS = { KeyA: -1, ArrowLeft: -1, KeyD: 1, ArrowRight: 1 };
@@ -386,6 +418,9 @@ function handleMenuKey(event) {
   } else if (MENU_STEPS[event.code]) {
     cycleMode(MENU_STEPS[event.code]);
     selectMode(getMode().key);
+  } else if (ATTACK_STEPS[event.code]) {
+    cycleAttack(ATTACK_STEPS[event.code]);
+    selectAttack(getAttack().id);
   }
 }
 
@@ -459,6 +494,8 @@ overlay.addEventListener('click', (event) => {
     openShop();
   } else if (dataset.mode !== undefined && inMenu) {
     selectMode(dataset.mode);
+  } else if (dataset.attack !== undefined && inMenu) {
+    selectAttack(dataset.attack);
   } else if (dataset.start !== undefined && inMenu) {
     startGame();
   } else if (dataset.resume !== undefined && state === 'paused') {
@@ -526,6 +563,8 @@ function updateHud() {
     announcedLevel = level;
     announce(`Level ${level}`);
   }
+  const attack = getAttack();
+  attackMeterLabel.textContent = attack.auto ? `${attack.name} (auto)` : attack.name;
   const readiness = getAttackReadiness();
   attackMeterFill.style.transform = `scaleX(${readiness})`;
   attackMeter.classList.toggle('ready', readiness >= 1);

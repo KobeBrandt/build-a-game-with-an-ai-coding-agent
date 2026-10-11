@@ -24,7 +24,8 @@ This starts the normal Vite dev server and opens `/upgraded/`. The upgraded game
 | Adding enemies | Enemies pop into the world when they spawn | `components/Enemy.js` |
 | Attack | Expanding shockwave ring on top of the fading circle | `components/Attack.js` |
 | Attack | Defeated enemies spin, rise and shrink away instead of vanishing | `components/Enemy.js` |
-| Attack | Cooldown meter at the bottom of the screen | `src/main.js`, `src/style.css` |
+| Attack | Cooldown meter at the bottom of the screen, labelled with the chosen attack | `src/main.js`, `src/style.css` |
+| Attack | Three attacks to choose from on the start and game over screens: Shockwave, Tongue (fires on its own) and Spit. See [Attacks](#attacks) | `components/Attack.js`, `components/Player.js`, `src/main.js` |
 | Score | Best score per mode, saved in the browser | `components/Score.js` |
 | Score | Score "pops" on every kill | `components/Score.js`, `src/style.css` |
 | Start, play, game over | Start screen with mode select and controls | `src/main.js` |
@@ -38,6 +39,21 @@ This starts the normal Vite dev server and opens `/upgraded/`. The upgraded game
 | Roguelite | Shields absorb a hit and knock out nearby enemies; XP bar and shield count in the top-left corner | `src/main.js`, `src/style.css` |
 | Controls | WASD as well as the arrow keys; `A`/`D` change the mode in the menu | `components/Player.js`, `src/main.js` |
 | Accessibility | WCAG 2.2 and Game Accessibility Guidelines pass over the menus and HUD. See [Accessibility](#accessibility) | `index.html`, `src/main.js`, `src/style.css` |
+
+## Attacks
+
+Pick an attack on the start or game over screen with `Q`/`E`, a click, or `Tab` and `Enter`.
+The choice lasts until you change it (it is not saved when the page reloads).
+
+| Attack | How it fires | Base cooldown | Base reach | What it hits |
+| --- | --- | --- | --- | --- |
+| Shockwave | `Space` | 1 s | 60 around Tode | Every enemy in the circle |
+| Tongue | Automatically, as soon as an enemy is in reach | 0.55 s | 120 to the enemy's edge | The nearest enemy, one per lash |
+| Spit | `Space` | 0.7 s | Flies 320 in the direction of Tode's last hop | Every enemy the glob touches (it pierces); pops on houses |
+
+The cooldown and reach upgrades (shop, level-up and difficulty scaling) apply to every attack:
+cooldown upgrades shorten each attack's own cooldown, and reach upgrades grow the Shockwave circle,
+the Tongue's reach, and Spit's range and glob size.
 
 ## Base upgrades (shop)
 
@@ -85,7 +101,7 @@ Built against WCAG 2.2 AA and the basic tier of the [Game Accessibility Guidelin
 
 | Upgrade | WCAG criteria | Where |
 | --- | --- | --- |
-| Every menu choice (modes, Start, Play again, Upgrades, shop cards, Back, level-up cards, Resume, Continue) is a real `<button>`, so it works with Tab, Enter, mouse, touch and screen readers | 2.1.1 Keyboard, 4.1.2 Name, Role, Value | `src/main.js` |
+| Every menu choice (modes, attacks, Start, Play again, Upgrades, shop cards, Back, level-up cards, Resume, Continue) is a real `<button>`, so it works with Tab, Enter, mouse, touch and screen readers | 2.1.1 Keyboard, 4.1.2 Name, Role, Value | `src/main.js` |
 | Each screen moves focus to the current choice; Tab moves the selection with the focus; Space or Enter on a focused button presses only that button | 2.4.3 Focus Order | `src/main.js` |
 | Thick white focus ring (3px, offset 3px) on keyboard focus | 2.4.7 Focus Visible, 2.4.11 Focus Not Obscured | `src/style.css` |
 | Mouse users can start, play again and resume (before, only the keyboard could) | 2.1.1 Keyboard, 2.5 Input Modalities | `src/main.js` |
@@ -103,8 +119,9 @@ Not done yet: adjustable game speed, key remapping and on-screen touch controls.
 ## Controls
 
 - `W` `A` `S` `D` or arrow keys: hop
-- `Space`: attack, start, or play again
+- `Space`: attack (Shockwave and Spit), start, or play again; the Tongue attacks on its own
 - `1` / `2` / `3`, or `A` / `D`: choose a mode on the start and game over screens
+- `Q` / `E`: choose an attack on the start and game over screens
 - `U`: open the upgrade shop from the start and game over screens (`W`/`S` choose, `Space` or `Enter` buy, `U`/`Esc` back)
 - Level up: `1` / `2` / `3`, or `A`/`D` and `Space`, or click a card
 - `P` or `Esc`: pause and resume
