@@ -19,3 +19,9 @@ export function setModeByKey(key) {
   currentMode = mode;
   return true;
 }
+
+// Step through the modes in menu order, wrapping around at either end
+export function cycleMode(step) {
+  const index = MODES.indexOf(currentMode);
+  currentMode = MODES[(index + step + MODES.length) % MODES.length];
+}
