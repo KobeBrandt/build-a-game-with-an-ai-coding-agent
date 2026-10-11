@@ -33,10 +33,15 @@ This starts the normal Vite dev server and opens `/upgraded/`. The upgraded game
 | Increasing complexity | Mode and level indicator in the top-right corner | `components/Difficulty.js`, `src/main.js` |
 | Game world | Grassy texture painted over the checkerboard | `components/Map.js` |
 | Game world | Trees and rocks built from simple shapes, which block movement like houses | `components/Scenery.js`, `components/Map.js` |
+| Roguelite | Coins earned each run (equal to the score) buy permanent base upgrades in the menu shop: hop speed, attack cooldown, attack reach, starting shields, XP gain, coin gain | `components/Shop.js`, `src/main.js` |
+| Roguelite | XP from kills and survival; every level up pauses the run to pick 1 of 3 random in-game upgrades that last until game over | `components/RunUpgrades.js`, `src/main.js` |
+| Roguelite | Shields absorb a hit and knock out nearby enemies; XP bar and shield count in the top-left corner | `src/main.js`, `src/style.css` |
 
 ## Controls
 
 - Arrow keys: hop
 - `Space`: attack, start, or play again
 - `1` / `2` / `3`: choose a mode on the start and game over screens
+- `U`: open the upgrade shop from the start and game over screens (`W`/`S` choose, `Space` buy, `U`/`Esc` back)
+- Level up: `1` / `2` / `3`, or `A`/`D` and `Space`, or click a card
 - `P` or `Esc`: pause
