@@ -115,6 +115,11 @@ export function updateAttack(scene, delta, player, enemies) {
   return kills;
 }
 
+// Drop a Space press that was meant for a menu, so it doesn't fire an attack on resume
+export function clearAttackRequest() {
+  attackRequested = false;
+}
+
 export function resetAttack() {
   cooldownRemaining = 0;
   fadeRemaining = 0;

@@ -168,6 +168,11 @@ export function updatePlayer(delta) {
   return false;
 }
 
+// Drop hops queued while a menu was open (A/D also move the menu selection)
+export function clearQueuedMoves() {
+  moveQueue.length = 0;
+}
+
 export function resetPlayer() {
   player.position.set(0, 0, 0);
   moveQueue.length = 0;
