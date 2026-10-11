@@ -27,13 +27,13 @@ kbd {
   border-radius: 8px;
   background: rgba(0, 0, 0, 0.5);
   color: #fff;
-  font: bold 24px/1.2 system-ui, sans-serif;
+  font: bold 1.5rem/1.2 system-ui, sans-serif;
   pointer-events: none;
   user-select: none;
 }
 
 .score-best {
-  font-size: 16px;
+  font-size: 1rem;
   font-weight: normal;
   opacity: 0.8;
 }
@@ -58,7 +58,7 @@ kbd {
   border-radius: 8px;
   background: rgba(0, 0, 0, 0.5);
   color: #fff;
-  font-size: 16px;
+  font-size: 1rem;
   pointer-events: none;
   user-select: none;
 }
@@ -93,7 +93,7 @@ kbd {
   position: relative;
   display: block;
   color: #fff;
-  font-size: 13px;
+  font-size: 0.875rem;
   font-weight: bold;
   line-height: 22px;
   text-align: center;
@@ -106,8 +106,9 @@ kbd {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  justify-content: safe center;
   padding: 16px;
+  overflow-y: auto;
   background: rgba(0, 0, 0, 0.55);
   color: #fff;
   text-align: center;
@@ -118,35 +119,60 @@ kbd {
   display: none;
 }
 
+.overlay button {
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+/* Keyboard focus ring: thick, high contrast, outside the card's own border */
+.overlay button:focus-visible {
+  outline: 3px solid #fff;
+  outline-offset: 3px;
+}
+
+/* Hidden on screen, still read by screen readers */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 .overlay h1 {
   margin: 0 0 12px;
-  font-size: 64px;
+  font-size: clamp(2.5rem, 9vw, 4rem);
 }
 
 .overlay p {
   margin: 0 0 12px;
-  font-size: 22px;
+  font-size: 1.375rem;
 }
 
 .overlay .final {
-  font-size: 32px;
+  font-size: 2rem;
   font-weight: bold;
 }
 
 .overlay .best {
-  font-size: 18px;
+  font-size: 1.125rem;
   opacity: 0.85;
 }
 
 .overlay .new-best {
   color: #ffd700;
   font-weight: bold;
-  animation: score-pop 0.8s ease-out infinite alternate;
+  animation: score-pop 0.8s ease-out 4 alternate;
 }
 
 .overlay .controls {
   margin-top: 12px;
-  font-size: 16px;
+  font-size: 1rem;
   opacity: 0.85;
 }
 
@@ -165,23 +191,29 @@ kbd {
   list-style: none;
 }
 
-.modes li {
+.modes button {
   padding: 10px 14px;
   border: 2px solid transparent;
   border-radius: 10px;
   background: rgba(255, 255, 255, 0.1);
-  font-size: 18px;
+  font-size: 1.125rem;
 }
 
-.modes li.selected {
+.modes button[aria-pressed='true'] {
   border-color: #ffd700;
   background: rgba(255, 215, 0, 0.2);
+}
+
+/* Selected mode gets a tick too, so it isn't shown by colour alone */
+.modes button[aria-pressed='true']::before {
+  content: '\2713  ' / '';
+  font-weight: bold;
 }
 
 .modes small {
   display: block;
   margin-top: 4px;
-  font-size: 13px;
+  font-size: 0.875rem;
   opacity: 0.8;
 }
 
@@ -196,7 +228,7 @@ kbd {
   border-radius: 8px;
   background: rgba(0, 0, 0, 0.5);
   color: #fff;
-  font-size: 14px;
+  font-size: 0.875rem;
   pointer-events: none;
   user-select: none;
 }
@@ -204,9 +236,9 @@ kbd {
 .xp-bar {
   position: relative;
   width: 160px;
-  height: 16px;
+  height: 20px;
   overflow: hidden;
-  border-radius: 8px;
+  border-radius: 10px;
   background: rgba(255, 255, 255, 0.15);
 }
 
@@ -222,9 +254,9 @@ kbd {
 .xp-bar span {
   position: relative;
   display: block;
-  font-size: 11px;
+  font-size: 0.875rem;
   font-weight: bold;
-  line-height: 16px;
+  line-height: 20px;
   text-align: center;
   text-shadow: 0 1px 2px #000;
 }
@@ -249,17 +281,32 @@ kbd {
 }
 
 .overlay .coins {
-  font-size: 18px;
+  font-size: 1.125rem;
   color: #ffd700;
 }
 
 .overlay .link {
-  color: #fff;
-  cursor: pointer;
+  padding: 4px 6px;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  text-decoration: underline;
 }
 
-.overlay .link:hover {
-  text-decoration: underline;
+.overlay .link kbd {
+  margin-left: 4px;
+  padding: 0 6px;
+  text-decoration: none;
+}
+
+.overlay .primary {
+  margin: 0 0 16px;
+  padding: 10px 32px;
+  border: 2px solid #ffd700;
+  border-radius: 10px;
+  background: rgba(255, 215, 0, 0.2);
+  font-size: 1.375rem;
+  font-weight: bold;
 }
 
 .shop {
@@ -272,8 +319,10 @@ kbd {
   text-align: left;
 }
 
-.shop li {
+.shop button {
   display: grid;
+  width: 100%;
+  text-align: left;
   grid-template-columns: 1fr auto;
   gap: 2px 12px;
   padding: 8px 14px;
@@ -283,7 +332,7 @@ kbd {
   cursor: pointer;
 }
 
-.shop li.selected {
+.shop button.selected {
   border-color: #ffd700;
   background: rgba(255, 215, 0, 0.2);
 }
@@ -303,11 +352,11 @@ kbd {
   text-align: right;
 }
 
-.shop li.too-expensive .cost {
+.shop button.too-expensive .cost {
   color: #ff8a80;
 }
 
-.shop li.maxed {
+.shop button.maxed {
   opacity: 0.6;
 }
 
@@ -321,8 +370,9 @@ kbd {
   list-style: none;
 }
 
-.choices li {
+.choices button {
   display: flex;
+  height: 100%;
   flex-direction: column;
   align-items: center;
   gap: 6px;
@@ -334,21 +384,35 @@ kbd {
   cursor: pointer;
 }
 
-.choices li.selected {
+.choices button.selected {
   border-color: #4fc3f7;
   background: rgba(79, 195, 247, 0.25);
 }
 
 .choices strong {
-  font-size: 18px;
+  font-size: 1.125rem;
 }
 
 .choices small {
-  font-size: 14px;
+  font-size: 0.875rem;
   opacity: 0.85;
 }
 
 .choices .stacks {
-  font-size: 12px;
-  opacity: 0.7;
+  font-size: 0.875rem;
+  opacity: 0.85;
+}
+
+/* Players who ask their system for less motion get no pops, pulses or full-screen flash */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+
+  .shield-flash::after {
+    display: none;
+  }
 }
