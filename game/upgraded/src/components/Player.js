@@ -72,6 +72,16 @@ const movement = {
   startAngle: 0,
 };
 
+// Direction of the last hop; Tode starts facing the camera (model.rotation.y = 0)
+let facing = 'backward';
+
+/**
+ * Unit vector { x, y } of the way Tode is facing.
+ */
+export function getFacing() {
+  return DIRECTIONS[facing];
+}
+
 // Directions of movement keys currently held down, most recently pressed last
 const heldDirections = [];
 
@@ -110,6 +120,7 @@ function startNextMove() {
   } else {
     return;
   }
+  facing = movement.direction;
   movement.progress = 0;
   movement.completed = false;
   movement.startAngle = model ? model.rotation.y : 0;
@@ -179,6 +190,7 @@ export function resetPlayer() {
   movement.direction = null;
   movement.progress = 0;
   movement.completed = true;
+  facing = 'backward';
   if (model) {
     model.position.z = groundOffset;
     model.rotation.y = 0;

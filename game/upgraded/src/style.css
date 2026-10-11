@@ -210,6 +210,17 @@ kbd {
   font-weight: bold;
 }
 
+.list-label {
+  margin: 0;
+  font-weight: bold;
+}
+
+.list-label kbd {
+  margin: 0 2px;
+  padding: 0 6px;
+  font-weight: normal;
+}
+
 .modes small {
   display: block;
   margin-top: 4px;
