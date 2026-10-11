@@ -15,7 +15,7 @@ import { addKills, getHighScore, getScore, resetScore, stopScore, updateScore } 
 import { getDifficulty, getLevel } from './components/Difficulty.js';
 import { isTouching } from './components/Collision.js';
 import { GameMap, updateMap } from './components/Map.js';
-import { getMode, MODES, setModeByKey } from './components/Modes.js';
+import { cycleMode, getMode, MODES, setModeByKey } from './components/Modes.js';
 
 // Shadow tuning: the sun follows the player, so only the area around it needs a shadow map
 const SUN_OFFSET = new THREE.Vector3(-100, -100, 200);
@@ -86,7 +86,7 @@ function modeListHtml() {
 
 const CONTROLS_HTML = `
   <p class="controls">
-    <kbd>&larr;</kbd><kbd>&uarr;</kbd><kbd>&darr;</kbd><kbd>&rarr;</kbd> hop
+    <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> or <kbd>&larr;</kbd><kbd>&uarr;</kbd><kbd>&darr;</kbd><kbd>&rarr;</kbd> hop
     &middot; <kbd>Space</kbd> attack
     &middot; <kbd>P</kbd> pause
   </p>`;
@@ -102,7 +102,7 @@ function renderOverlay() {
   if (state === 'start') {
     overlay.innerHTML = `
       <h1>Tode's Escape</h1>
-      <p>Choose a mode, then press <kbd>Space</kbd> to start</p>
+      <p>Choose a mode with <kbd>A</kbd>/<kbd>D</kbd>, then press <kbd>Space</kbd> to start</p>
       ${modeListHtml()}
       <p class="best">Best in ${getMode().name}: ${getHighScore()}</p>
       ${CONTROLS_HTML}`;
@@ -137,6 +137,9 @@ function startGame() {
   renderOverlay();
 }
 
+// Menu keys that move the mode selection back or forward through the list
+const MENU_STEPS = { KeyA: -1, ArrowLeft: -1, KeyD: 1, ArrowRight: 1 };
+
 // Registered after Attack.js, so this runs after its Space handler; resetAttack drops that press
 window.addEventListener('keydown', (event) => {
   if (event.repeat) return;
@@ -145,6 +148,9 @@ window.addEventListener('keydown', (event) => {
   if (event.code === 'Space' && onMenu) {
     startGame();
   } else if (onMenu && setModeByKey(event.key)) {
+    renderOverlay();
+  } else if (onMenu && MENU_STEPS[event.code]) {
+    cycleMode(MENU_STEPS[event.code]);
     renderOverlay();
   } else if (event.code === 'KeyP' || event.code === 'Escape') {
     if (state === 'playing') state = 'paused';

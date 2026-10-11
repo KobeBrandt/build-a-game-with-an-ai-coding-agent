@@ -19,11 +19,16 @@ const DIRECTIONS = {
   right: { x: 1, y: 0, angle: Math.PI / 2 },
 };
 
+// Keyed by event.code so WASD sits in the same place on every keyboard layout
 const KEY_TO_DIRECTION = {
   ArrowUp: 'forward',
   ArrowDown: 'backward',
   ArrowLeft: 'left',
   ArrowRight: 'right',
+  KeyW: 'forward',
+  KeyS: 'backward',
+  KeyA: 'left',
+  KeyD: 'right',
 };
 
 export const player = new THREE.Group();
@@ -67,11 +72,11 @@ const movement = {
   startAngle: 0,
 };
 
-// Directions of arrow keys currently held down, most recently pressed last
+// Directions of movement keys currently held down, most recently pressed last
 const heldDirections = [];
 
 window.addEventListener('keydown', (event) => {
-  const direction = KEY_TO_DIRECTION[event.key];
+  const direction = KEY_TO_DIRECTION[event.code];
   if (!direction) return;
 
   event.preventDefault();
@@ -83,7 +88,7 @@ window.addEventListener('keydown', (event) => {
 });
 
 window.addEventListener('keyup', (event) => {
-  const direction = KEY_TO_DIRECTION[event.key];
+  const direction = KEY_TO_DIRECTION[event.code];
   if (!direction) return;
 
   const index = heldDirections.indexOf(direction);
