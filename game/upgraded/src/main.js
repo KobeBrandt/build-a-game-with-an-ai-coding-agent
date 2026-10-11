@@ -529,11 +529,12 @@ const playerTouchesEnemy = () =>
 function applyDifficulty(score) {
   const difficulty = getDifficulty(score);
   const stats = getStats();
-  setEnemyDifficulty(difficulty.enemySpeed * stats.enemySpeed, difficulty.enemySpawnDelay);
+  setEnemyDifficulty(difficulty.enemySpeed * stats.enemySpeed, difficulty.enemySpawnDelay, difficulty.enemyHealth);
   setPlayerSpeed(difficulty.playerSpeed * stats.playerSpeed);
   setAttackDifficulty(
     difficulty.attackCooldown * stats.attackCooldown,
-    difficulty.attackRadius * stats.attackRadius
+    difficulty.attackRadius * stats.attackRadius,
+    stats.attackDamage
   );
 }
 

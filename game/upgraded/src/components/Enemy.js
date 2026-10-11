@@ -18,6 +18,13 @@ const DESPAWN_DISTANCE = 1200; // enemies left this far behind are removed
 const DEFEAT_DURATION = 0.25; // seconds a defeated enemy takes to spin and shrink away
 const SPAWN_DURATION = 0.35; // seconds a new enemy takes to grow in
 
+// Health tuning (base health per enemy comes from the selected game mode)
+const KNOCKBACK_DISTANCE = 14; // how far a hit that doesn't defeat an enemy pushes it away
+const HIT_FLASH_DURATION = 0.15; // seconds a hit enemy stays squashed
+const HEALTH_BAR_WIDTH = 24;
+const HEALTH_BAR_HEIGHT = 3;
+const HEALTH_BAR_GAP = 6; // space between the top of the model and the bar
+
 // Spawn points relative to the player (the corners of a square around it)
 const SPAWN_OFFSETS = [
   new THREE.Vector2(-SPAWN_DISTANCE, -SPAWN_DISTANCE),
@@ -30,6 +37,29 @@ export const enemies = [];
 
 let template = null;
 let templateRadius = 0;
+let templateHeight = 0;
+
+// Health bars are sprites, so they always face the camera; they only show once an enemy is hurt
+const healthBarBackMaterial = new THREE.SpriteMaterial({ color: 0x1a1a1a, depthTest: false });
+const healthBarFillMaterial = new THREE.SpriteMaterial({ color: 0xff4d4d, depthTest: false });
+
+function createHealthBar() {
+  const bar = new THREE.Group();
+  const back = new THREE.Sprite(healthBarBackMaterial);
+  back.scale.set(HEALTH_BAR_WIDTH + 2, HEALTH_BAR_HEIGHT + 2, 1);
+  // The fill grows from its left edge
+  const fill = new THREE.Sprite(healthBarFillMaterial);
+  fill.center.set(0, 0.5);
+  fill.position.x = -HEALTH_BAR_WIDTH / 2;
+  fill.scale.set(HEALTH_BAR_WIDTH, HEALTH_BAR_HEIGHT, 1);
+  back.renderOrder = 10;
+  fill.renderOrder = 11;
+  bar.add(back, fill);
+  bar.position.z = templateHeight + HEALTH_BAR_GAP;
+  bar.visible = false;
+  bar.userData.fill = fill;
+  return bar;
+}
 
 const loader = new GLTFLoader();
 loader.load('/models/enemy.glb', (gltf) => {
@@ -46,6 +76,7 @@ loader.load('/models/enemy.glb', (gltf) => {
 
   template = model;
   templateRadius = computeCollisionRadius(model);
+  templateHeight = box.max.z - box.min.z;
 });
 
 function createEnemy(spawnPoint) {
@@ -58,6 +89,11 @@ function createEnemy(spawnPoint) {
   // Which way this enemy walks around obstacles: 1 = left, -1 = right
   enemy.userData.detourSide = Math.random() < 0.5 ? 1 : -1;
   enemy.userData.age = 0;
+  enemy.userData.maxHealth = enemyHealth;
+  enemy.userData.health = enemyHealth;
+  enemy.userData.hitTimer = 0;
+  enemy.userData.healthBar = createHealthBar();
+  enemy.add(enemy.userData.healthBar);
   enemy.scale.setScalar(0.01);
   return enemy;
 }
@@ -65,11 +101,14 @@ function createEnemy(spawnPoint) {
 // Current values, scaled by setEnemyDifficulty
 let enemySpeed = getMode().enemySpeed;
 let spawnDelay = getMode().spawnDelay;
+let enemyHealth = getMode().enemyHealth;
 
-export function setEnemyDifficulty(speedMultiplier, spawnDelayMultiplier) {
+// Health only applies to enemies spawned from now on; enemies already out keep theirs
+export function setEnemyDifficulty(speedMultiplier, spawnDelayMultiplier, healthMultiplier = 1) {
   const mode = getMode();
   enemySpeed = mode.enemySpeed * speedMultiplier;
   spawnDelay = mode.spawnDelay * spawnDelayMultiplier;
+  enemyHealth = Math.round(mode.enemyHealth * healthMultiplier);
 }
 
 let spawnTimer = Infinity; // spawn the first enemy right away
@@ -154,6 +193,42 @@ export function defeatEnemy(scene, enemy) {
   defeated.push({ enemy, scene, remaining: DEFEAT_DURATION });
 }
 
+/**
+ * Deal `amount` damage to `enemy`, pushing it away from (`fromX`, `fromY`).
+ * Returns true if the hit defeated it.
+ */
+export function damageEnemy(scene, enemy, amount, fromX, fromY) {
+  const { userData } = enemy;
+  userData.health -= amount;
+  if (userData.health <= 0) {
+    userData.healthBar.visible = false;
+    defeatEnemy(scene, enemy);
+    return true;
+  }
+
+  userData.hitTimer = HIT_FLASH_DURATION;
+  userData.healthBar.visible = true;
+  const share = userData.health / userData.maxHealth;
+  userData.healthBar.userData.fill.scale.x = HEALTH_BAR_WIDTH * share;
+
+  // Knock the enemy back, unless a house or another body is in the way
+  const dx = enemy.position.x - fromX;
+  const dy = enemy.position.y - fromY;
+  const distance = Math.hypot(dx, dy);
+  if (distance > 0.001) {
+    const nextX = enemy.position.x + (dx / distance) * KNOCKBACK_DISTANCE;
+    const nextY = enemy.position.y + (dy / distance) * KNOCKBACK_DISTANCE;
+    if (
+      !wouldCollide(enemy.position, nextX, nextY, userData.radius, enemies) &&
+      !wouldHitObstacle(enemy.position, nextX, nextY, userData.radius)
+    ) {
+      enemy.position.x = nextX;
+      enemy.position.y = nextY;
+    }
+  }
+  return false;
+}
+
 export function updateDefeatedEnemies(delta) {
   for (let i = defeated.length - 1; i >= 0; i--) {
     const entry = defeated[i];
@@ -173,7 +248,15 @@ export function updateDefeatedEnemies(delta) {
 
 function growNewEnemies(delta) {
   for (const enemy of enemies) {
-    if (enemy.userData.age >= SPAWN_DURATION) continue;
+    if (enemy.userData.age >= SPAWN_DURATION) {
+      // A hit enemy squashes flat and springs back
+      if (enemy.userData.hitTimer > 0) {
+        enemy.userData.hitTimer = Math.max(0, enemy.userData.hitTimer - delta);
+        const squash = 0.25 * (enemy.userData.hitTimer / HIT_FLASH_DURATION);
+        enemy.scale.set(1 + squash, 1 + squash, 1 - squash);
+      }
+      continue;
+    }
     enemy.userData.age = Math.min(SPAWN_DURATION, enemy.userData.age + delta);
     const t = enemy.userData.age / SPAWN_DURATION;
     // Ease out with a small overshoot, so enemies "pop" into the world
@@ -217,6 +300,7 @@ export function resetEnemies(scene) {
   defeated.length = 0;
   enemySpeed = getMode().enemySpeed;
   spawnDelay = getMode().spawnDelay;
+  enemyHealth = getMode().enemyHealth;
   spawnTimer = Infinity; // spawn at the first corner right away again
   nextSpawnIndex = 0;
 }

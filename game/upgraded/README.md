@@ -26,6 +26,7 @@ This starts the normal Vite dev server and opens `/upgraded/`. The upgraded game
 | Attack | Defeated enemies spin, rise and shrink away instead of vanishing | `components/Enemy.js` |
 | Attack | Cooldown meter at the bottom of the screen, labelled with the chosen attack | `src/main.js`, `src/style.css` |
 | Attack | Three attacks to choose from on the start and game over screens: Shockwave, Tongue (fires on its own) and Spit. See [Attacks](#attacks) | `components/Attack.js`, `components/Player.js`, `src/main.js` |
+| Attack | Enemy health and balanced damage per attack: enemies take several hits, show a health bar once hurt, squash and get knocked back when hit. See [Enemy health and damage](#enemy-health-and-damage) | `components/Enemy.js`, `components/Attack.js`, `components/Modes.js`, `components/Difficulty.js` |
 | Score | Best score per mode, saved in the browser | `components/Score.js` |
 | Score | Score "pops" on every kill | `components/Score.js`, `src/style.css` |
 | Start, play, game over | Start screen with mode select and controls | `src/main.js` |
@@ -47,13 +48,51 @@ The choice lasts until you change it (it is not saved when the page reloads).
 
 | Attack | How it fires | Base cooldown | Base reach | What it hits |
 | --- | --- | --- | --- | --- |
-| Shockwave | `Space` | 1 s | 60 around Tode | Every enemy in the circle |
-| Tongue | Automatically, as soon as an enemy is in reach | 0.55 s | 120 to the enemy's edge | The nearest enemy, one per lash |
-| Spit | `Space` | 0.7 s | Flies 320 in the direction of Tode's last hop | Every enemy the glob touches (it pierces); pops on houses |
+| Attack | How it fires | Base cooldown | Base damage | Base reach | What it hits |
+| --- | --- | --- | --- | --- | --- |
+| Shockwave | `Space` | 1 s | 10 | 60 around Tode | Every enemy in the circle |
+| Tongue | Automatically, as soon as an enemy is in reach | 0.55 s | 6 | 120 to the enemy's edge | The nearest enemy, one per lash |
+| Spit | `Space` | 0.7 s | 7 | Flies 320 in the direction of Tode's last hop | Every enemy the glob touches, once each (it pierces); pops on houses |
 
-The cooldown and reach upgrades (shop, level-up and difficulty scaling) apply to every attack:
-cooldown upgrades shorten each attack's own cooldown, and reach upgrades grow the Shockwave circle,
-the Tongue's reach, and Spit's range and glob size.
+The cooldown, reach and damage upgrades (shop, level-up and difficulty scaling) apply to every attack:
+cooldown upgrades shorten each attack's own cooldown, reach upgrades grow the Shockwave circle,
+the Tongue's reach, and Spit's range and glob size, and damage upgrades raise each attack's own damage.
+
+## Enemy health and damage
+
+Enemies no longer fall to any single hit. Each enemy spawns with health set by the game mode,
+and every attack deals its own damage (see [Attacks](#attacks)). A hit that doesn't defeat an enemy:
+
+- shows a red health bar above it (hidden until the first hit),
+- squashes it flat for a moment,
+- knocks it back 14 units, away from Tode (Shockwave, Tongue) or along the glob's path (Spit), unless a house or another body is in the way.
+
+Only defeated enemies count as kills for the score and XP. Shields still knock out every enemy close to Tode, whatever its health.
+
+### Enemy health per mode
+
+| Mode | Base health | Shockwave hits | Tongue lashes | Spit hits |
+| --- | --- | --- | --- | --- |
+| Classic | 10 | 1 | 2 | 2 |
+| Horde | 6 | 1 | 1 | 1 |
+| Hunter | 18 | 2 | 3 | 3 |
+
+Hits needed are for a fresh enemy at level 1 with no damage upgrades.
+
+### How the damage is balanced
+
+Each attack's damage is set against how it hits, so no attack is best everywhere:
+
+- **Shockwave** is the slowest, has the shortest reach and only hits when enemies are close, but it hits every enemy around Tode. It hits hardest, so it one-shots a fresh Classic or Horde enemy.
+- **Tongue** aims and fires on its own, but at one enemy per lash. It hits softest and most often (about 11 damage per second on one target).
+- **Spit** pierces a whole line of enemies but has to be aimed by hopping. It sits in between (10 damage per second, on every enemy in the line).
+
+### Health scaling
+
+Enemy health grows with the difficulty factor (`score × 0.005`) at half the rate of enemy speed:
+health multiplier = `1 + factor × 0.5`, capped at 3×. So at score 100 new enemies have 1.25× health
+(Classic: 13, so the Shockwave now needs 2 hits). The health is rounded and fixed when an enemy spawns.
+Attack damage does not grow with difficulty; the damage upgrades below are how you keep up.
 
 ## Base upgrades (shop)
 
@@ -67,6 +106,7 @@ Each level costs `base cost × (current level + 1)` coins, so the first level co
 | Swift Legs | +6% hop speed | 5 | 40 | 40, 80, 120, 160, 200 | 600 |
 | Quick Recovery | -6% attack cooldown | 5 | 40 | 40, 80, 120, 160, 200 | 600 |
 | Big Shockwave | +8% attack reach | 5 | 50 | 50, 100, 150, 200, 250 | 750 |
+| Strong Jaw | +10% attack damage | 5 | 50 | 50, 100, 150, 200, 250 | 750 |
 | Extra Life | Start each run with +1 shield | 2 | 150 | 150, 300 | 450 |
 | Fast Learner | +15% XP | 5 | 30 | 30, 60, 90, 120, 150 | 450 |
 | Treasure Hunter | +20% coins | 5 | 30 | 30, 60, 90, 120, 150 | 450 |
@@ -88,6 +128,7 @@ If every upgrade is maxed, a **Continue** button appears instead.
 | Swift Hops | +10% hop speed | 5 |
 | Quick Recharge | -12% attack cooldown | 5 |
 | Wider Shockwave | +15% attack reach | 4 |
+| Heavy Hits | +15% attack damage | 4 |
 | Shield | Survive one more hit | 3 |
 | Sticky Ground | -8% enemy speed | 4 |
 | Quick Study | +25% XP | 3 |
