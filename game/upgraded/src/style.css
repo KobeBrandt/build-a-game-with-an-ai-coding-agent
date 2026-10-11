@@ -1,18 +1,53 @@
+/* Frog and pond palette, taken from Tode's own greens (public/tode.svg) */
+:root {
+  --frog: #21d789; /* Tode's body */
+  --frog-dark: #13bc6f; /* Tode's feet */
+  --pond: #0b3d2c; /* deep pond water, panel background */
+  --pond-deep: #062419; /* panel outline and drop shadow */
+  --lily: #1a6b47; /* lily pad, button background */
+  --lily-light: #2a8a5e;
+  --cream: #f4fbe9; /* text */
+  --fly: #ffd84a; /* gold: coins, selection, ready */
+  --tongue: #ff7a9c; /* XP bar */
+  --danger: #ffb3a7;
+  --panel-shadow: 0 4px 0 var(--pond-deep), 0 8px 18px rgba(0, 0, 0, 0.35);
+  --font: 'Fredoka', 'Trebuchet MS', system-ui, sans-serif;
+}
+
 body {
   margin: 0;
   overflow: hidden;
   background: linear-gradient(#87ceeb, #d8f3ff);
-  font-family: system-ui, sans-serif;
+  font-family: var(--font);
 }
 
+/* Keys look like little cream lily-pad keycaps */
 kbd {
   display: inline-block;
   min-width: 1em;
   padding: 2px 8px;
-  border: 1px solid #fff;
-  border-radius: 4px;
+  border: 2px solid var(--pond-deep);
+  border-bottom-width: 4px;
+  border-radius: 8px;
+  background: var(--cream);
+  color: var(--pond);
   font-family: inherit;
+  font-weight: 600;
+  line-height: 1.2;
   text-align: center;
+}
+
+/* Every HUD panel is a rounded lily pad with a chunky drop shadow, like Tode's flat blocks */
+.score,
+.level,
+.run-hud {
+  border: 3px solid var(--frog-dark);
+  border-radius: 16px;
+  background: var(--pond);
+  box-shadow: var(--panel-shadow);
+  color: var(--cream);
+  pointer-events: none;
+  user-select: none;
 }
 
 .score {
@@ -23,19 +58,14 @@ kbd {
   display: flex;
   gap: 16px;
   align-items: baseline;
-  padding: 6px 16px;
-  border-radius: 8px;
-  background: rgba(0, 0, 0, 0.5);
-  color: #fff;
-  font: bold 1.5rem/1.2 system-ui, sans-serif;
-  pointer-events: none;
-  user-select: none;
+  padding: 6px 18px;
+  font: 600 1.5rem/1.2 var(--font);
 }
 
 .score-best {
   font-size: 1rem;
-  font-weight: normal;
-  opacity: 0.8;
+  font-weight: 500;
+  opacity: 0.85;
 }
 
 .score-pop .score-value {
@@ -45,7 +75,7 @@ kbd {
 
 @keyframes score-pop {
   40% {
-    color: #ffd700;
+    color: var(--fly);
     transform: scale(1.3);
   }
 }
@@ -54,26 +84,24 @@ kbd {
   position: fixed;
   top: 16px;
   right: 16px;
-  padding: 6px 12px;
-  border-radius: 8px;
-  background: rgba(0, 0, 0, 0.5);
-  color: #fff;
+  padding: 6px 14px;
   font-size: 1rem;
-  pointer-events: none;
-  user-select: none;
+  font-weight: 500;
 }
 
+/* Cooldown meter: a gold fly charges up while the bar fills */
 .attack-meter {
   position: fixed;
   bottom: 24px;
   left: 50%;
-  width: 180px;
-  height: 22px;
+  width: 200px;
+  height: 28px;
   transform: translateX(-50%);
   overflow: hidden;
-  border: 2px solid rgba(255, 255, 255, 0.8);
-  border-radius: 11px;
-  background: rgba(0, 0, 0, 0.5);
+  border: 3px solid var(--frog-dark);
+  border-radius: 14px;
+  background: var(--pond);
+  box-shadow: var(--panel-shadow);
   pointer-events: none;
   user-select: none;
 }
@@ -81,25 +109,36 @@ kbd {
 .attack-meter-fill {
   position: absolute;
   inset: 0;
-  background: #b8860b;
+  background: var(--lily-light);
   transform-origin: left;
 }
 
+.attack-meter.ready {
+  border-color: var(--fly);
+}
+
 .attack-meter.ready .attack-meter-fill {
-  background: #ffd700;
+  background: var(--frog);
+}
+
+/* Dark label on the bright ready bar keeps the contrast up */
+.attack-meter.ready span {
+  color: var(--pond-deep);
+  text-shadow: none;
 }
 
 .attack-meter span {
   position: relative;
   display: block;
-  color: #fff;
-  font-size: 0.875rem;
-  font-weight: bold;
+  color: var(--cream);
+  font-size: 0.9375rem;
+  font-weight: 600;
   line-height: 22px;
   text-align: center;
-  text-shadow: 0 1px 2px #000;
+  text-shadow: 0 1px 2px var(--pond-deep), 0 0 4px var(--pond-deep);
 }
 
+/* Menus float over a dark pond with soft ripple rings */
 .overlay {
   position: fixed;
   inset: 0;
@@ -109,8 +148,12 @@ kbd {
   justify-content: safe center;
   padding: 16px;
   overflow-y: auto;
-  background: rgba(0, 0, 0, 0.55);
-  color: #fff;
+  background:
+    repeating-radial-gradient(circle at 12% 88%, transparent 0 34px, rgba(33, 215, 137, 0.07) 34px 37px, transparent 37px 72px),
+    repeating-radial-gradient(circle at 90% 12%, transparent 0 40px, rgba(33, 215, 137, 0.06) 40px 43px, transparent 43px 84px),
+    radial-gradient(ellipse at center, rgba(11, 61, 44, 0.72), rgba(6, 36, 25, 0.9));
+  color: var(--cream);
+  font-family: var(--font);
   text-align: center;
   user-select: none;
 }
@@ -144,9 +187,43 @@ kbd {
   border: 0;
 }
 
+/* Tode himself sits on top of the start and game over titles */
+.title-tode {
+  width: clamp(64px, 14vw, 96px);
+  height: auto;
+  margin-bottom: -6px;
+  filter: drop-shadow(0 4px 0 var(--pond-deep));
+  animation: tode-hop 1.6s ease-in-out infinite;
+}
+
+.game-over .title-tode {
+  transform: rotate(180deg);
+  animation: none;
+}
+
+@keyframes tode-hop {
+  0%,
+  60%,
+  100% {
+    transform: translateY(0) scale(1, 1);
+  }
+  70% {
+    transform: translateY(2px) scale(1.12, 0.88);
+  }
+  82% {
+    transform: translateY(-14px) scale(0.92, 1.08);
+  }
+}
+
 .overlay h1 {
   margin: 0 0 12px;
+  color: var(--frog);
   font-size: clamp(2.5rem, 9vw, 4rem);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  -webkit-text-stroke: 2px var(--pond-deep);
+  paint-order: stroke fill;
+  text-shadow: 0 5px 0 var(--pond-deep), 0 10px 20px rgba(0, 0, 0, 0.4);
 }
 
 .overlay p {
@@ -156,7 +233,7 @@ kbd {
 
 .overlay .final {
   font-size: 2rem;
-  font-weight: bold;
+  font-weight: 700;
 }
 
 .overlay .best {
@@ -165,15 +242,15 @@ kbd {
 }
 
 .overlay .new-best {
-  color: #ffd700;
-  font-weight: bold;
+  color: var(--fly);
+  font-weight: 700;
   animation: score-pop 0.8s ease-out 4 alternate;
 }
 
 .overlay .controls {
   margin-top: 12px;
   font-size: 1rem;
-  opacity: 0.85;
+  opacity: 0.9;
 }
 
 .overlay .controls kbd {
@@ -181,27 +258,62 @@ kbd {
   padding: 0 6px;
 }
 
+/* Mode, attack, shop and level-up buttons are lily pads that sink when pressed */
+.modes button,
+.shop button,
+.choices button {
+  border: 3px solid var(--pond-deep);
+  background: var(--lily);
+  box-shadow: 0 4px 0 var(--pond-deep);
+  transition:
+    transform 0.08s ease-out,
+    box-shadow 0.08s ease-out,
+    background-color 0.15s;
+}
+
+.modes button:hover,
+.shop button:hover,
+.choices button:hover {
+  background: var(--lily-light);
+}
+
+.modes button:active,
+.shop button:active,
+.choices button:active,
+.overlay .primary:active {
+  transform: translateY(3px);
+  box-shadow: 0 1px 0 var(--pond-deep);
+}
+
 .modes {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
   gap: 12px;
-  margin: 8px 0 16px;
+  margin: 8px 0 18px;
   padding: 0;
   list-style: none;
 }
 
 .modes button {
-  padding: 10px 14px;
-  border: 2px solid transparent;
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.1);
+  padding: 10px 16px;
+  border-radius: 18px;
   font-size: 1.125rem;
+  font-weight: 600;
 }
 
 .modes button[aria-pressed='true'] {
-  border-color: #ffd700;
-  background: rgba(255, 215, 0, 0.2);
+  border-color: var(--fly);
+  background: var(--frog-dark);
+  color: var(--pond-deep);
+}
+
+.modes button[aria-pressed='true']:hover {
+  background: var(--frog);
+}
+
+.modes button[aria-pressed='true'] small {
+  opacity: 1;
 }
 
 /* Selected mode gets a tick too, so it isn't shown by colour alone */
@@ -212,20 +324,21 @@ kbd {
 
 .list-label {
   margin: 0;
-  font-weight: bold;
+  font-weight: 600;
 }
 
 .list-label kbd {
   margin: 0 2px;
   padding: 0 6px;
-  font-weight: normal;
+  font-weight: 600;
 }
 
 .modes small {
   display: block;
   margin-top: 4px;
   font-size: 0.875rem;
-  opacity: 0.8;
+  font-weight: 500;
+  opacity: 0.85;
 }
 
 .run-hud {
@@ -236,27 +349,25 @@ kbd {
   flex-direction: column;
   gap: 6px;
   padding: 8px 12px;
-  border-radius: 8px;
-  background: rgba(0, 0, 0, 0.5);
-  color: #fff;
-  font-size: 0.875rem;
-  pointer-events: none;
-  user-select: none;
+  font-size: 0.9375rem;
+  font-weight: 500;
 }
 
+/* XP bar fills up in Tode's tongue pink */
 .xp-bar {
   position: relative;
   width: 160px;
-  height: 20px;
+  height: 22px;
   overflow: hidden;
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.15);
+  border: 2px solid var(--pond-deep);
+  border-radius: 11px;
+  background: var(--lily);
 }
 
 .xp-bar-fill {
   position: absolute;
   inset: 0;
-  background: #4fc3f7;
+  background: var(--tongue);
   transform: scaleX(0);
   transform-origin: left;
   transition: transform 0.15s ease-out;
@@ -266,21 +377,21 @@ kbd {
   position: relative;
   display: block;
   font-size: 0.875rem;
-  font-weight: bold;
-  line-height: 20px;
+  font-weight: 600;
+  line-height: 18px;
   text-align: center;
-  text-shadow: 0 1px 2px #000;
+  text-shadow: 0 1px 2px var(--pond-deep), 0 0 4px var(--pond-deep);
 }
 
 .shields.empty {
-  opacity: 0.5;
+  opacity: 0.6;
 }
 
 .shield-flash::after {
   content: '';
   position: fixed;
   inset: 0;
-  background: rgba(79, 195, 247, 0.5);
+  background: rgba(33, 215, 137, 0.45);
   pointer-events: none;
   animation: shield-flash 0.5s ease-out forwards;
 }
@@ -293,7 +404,8 @@ kbd {
 
 .overlay .coins {
   font-size: 1.125rem;
-  color: #ffd700;
+  font-weight: 600;
+  color: var(--fly);
 }
 
 .overlay .link {
@@ -310,21 +422,32 @@ kbd {
   text-decoration: none;
 }
 
+/* Main action: a big, bright frog-green button */
 .overlay .primary {
   margin: 0 0 16px;
-  padding: 10px 32px;
-  border: 2px solid #ffd700;
-  border-radius: 10px;
-  background: rgba(255, 215, 0, 0.2);
-  font-size: 1.375rem;
-  font-weight: bold;
+  padding: 10px 40px;
+  border: 3px solid var(--pond-deep);
+  border-radius: 999px;
+  background: var(--frog);
+  box-shadow: 0 5px 0 var(--pond-deep), 0 10px 18px rgba(0, 0, 0, 0.35);
+  color: var(--pond-deep);
+  font-size: 1.5rem;
+  font-weight: 700;
+  transition:
+    transform 0.08s ease-out,
+    box-shadow 0.08s ease-out,
+    background-color 0.15s;
+}
+
+.overlay .primary:hover {
+  background: #4ae6a2;
 }
 
 .shop {
   display: grid;
-  gap: 8px;
+  gap: 10px;
   width: min(480px, 100%);
-  margin: 8px 0 16px;
+  margin: 8px 0 18px;
   padding: 0;
   list-style: none;
   text-align: left;
@@ -337,50 +460,55 @@ kbd {
   grid-template-columns: 1fr auto;
   gap: 2px 12px;
   padding: 8px 14px;
-  border: 2px solid transparent;
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.1);
+  border-radius: 14px;
   cursor: pointer;
 }
 
-.shop button.selected {
-  border-color: #ffd700;
-  background: rgba(255, 215, 0, 0.2);
+.shop button.selected,
+.choices button.selected {
+  border-color: var(--fly);
+  background: var(--lily-light);
 }
 
+.shop strong {
+  font-weight: 600;
+}
+
+/* Level pips are little lily pads: filled green, empty outlined */
 .shop .pips {
-  color: #ffd700;
+  color: var(--frog);
   letter-spacing: 2px;
 }
 
 .shop small {
-  opacity: 0.8;
+  opacity: 0.85;
 }
 
 .shop .cost {
-  color: #ffd700;
-  font-weight: bold;
+  color: var(--fly);
+  font-weight: 700;
   text-align: right;
 }
 
 .shop button.too-expensive .cost {
-  color: #ff8a80;
+  color: var(--danger);
 }
 
 .shop button.maxed {
-  opacity: 0.6;
+  opacity: 0.65;
 }
 
 .choices {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
-  gap: 12px;
-  margin: 8px 0 16px;
+  gap: 14px;
+  margin: 8px 0 18px;
   padding: 0;
   list-style: none;
 }
 
+/* Level-up cards are round lily pads */
 .choices button {
   display: flex;
   height: 100%;
@@ -388,33 +516,27 @@ kbd {
   align-items: center;
   gap: 6px;
   width: 170px;
-  padding: 14px;
-  border: 2px solid transparent;
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.1);
+  padding: 16px 14px;
+  border-radius: 28px;
   cursor: pointer;
 }
 
-.choices button.selected {
-  border-color: #4fc3f7;
-  background: rgba(79, 195, 247, 0.25);
-}
-
 .choices strong {
-  font-size: 1.125rem;
+  font-size: 1.1875rem;
+  font-weight: 600;
 }
 
 .choices small {
   font-size: 0.875rem;
-  opacity: 0.85;
+  opacity: 0.9;
 }
 
 .choices .stacks {
   font-size: 0.875rem;
-  opacity: 0.85;
+  opacity: 0.9;
 }
 
-/* Players who ask their system for less motion get no pops, pulses or full-screen flash */
+/* Players who ask their system for less motion get no pops, pulses, hops or full-screen flash */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
