@@ -108,20 +108,39 @@ document.body.appendChild(runHud);
 const xpBarFill = runHud.querySelector('.xp-bar-fill');
 const shieldsElement = runHud.querySelector('.shields');
 
-// One overlay for the start, pause and game over screens
+// One overlay for the start, pause and game over screens.
+// Not aria-modal: that would hide the announcer below from some screen readers.
 const overlay = document.createElement('div');
 overlay.className = 'overlay';
+overlay.setAttribute('role', 'dialog');
+overlay.setAttribute('aria-labelledby', 'overlay-title');
 document.body.appendChild(overlay);
+
+// Screen reader announcements for events that happen outside the focused element
+const announcer = document.createElement('div');
+announcer.className = 'sr-only';
+announcer.setAttribute('aria-live', 'polite');
+document.body.appendChild(announcer);
+
+function announce(message) {
+  // Clear first so the same message twice in a row is still read out
+  announcer.textContent = '';
+  setTimeout(() => {
+    announcer.textContent = message;
+  }, 50);
+}
 
 function modeListHtml() {
   const current = getMode();
   const items = MODES.map(
     (mode) => `
-      <li class="${mode === current ? 'selected' : ''}">
-        <kbd>${mode.key}</kbd> ${mode.name} <small>${mode.description}</small>
+      <li>
+        <button type="button" data-mode="${mode.key}" aria-pressed="${mode === current}">
+          <kbd>${mode.key}</kbd> ${mode.name} <small>${mode.description}</small>
+        </button>
       </li>`
   ).join('');
-  return `<ul class="modes">${items}</ul>`;
+  return `<ul class="modes" aria-label="Game mode">${items}</ul>`;
 }
 
 const CONTROLS_HTML = `
@@ -136,36 +155,48 @@ function shopHtml() {
     const level = getUpgradeLevel(upgrade);
     const maxed = isMaxed(upgrade);
     const cost = getUpgradeCost(upgrade);
+    const shortfall = cost - getCoins();
     const classes = [
       index === shopIndex ? 'selected' : '',
       maxed ? 'maxed' : '',
-      !maxed && cost > getCoins() ? 'too-expensive' : '',
+      !maxed && shortfall > 0 ? 'too-expensive' : '',
     ].join(' ');
+    // Spell out the price state in text so it doesn't rely on the cost colour
+    let costText = `${cost} coins`;
+    if (maxed) costText = 'Max';
+    else if (shortfall > 0) costText = `${cost} coins (need ${shortfall} more)`;
     return `
-      <li class="${classes}" data-buy="${index}">
-        <strong>${upgrade.name}</strong>
-        <span class="pips">${'&#9679;'.repeat(level)}${'&#9675;'.repeat(upgrade.maxLevel - level)}</span>
-        <small>${upgrade.description}</small>
-        <span class="cost">${maxed ? 'Max' : `${cost} coins`}</span>
+      <li>
+        <button type="button" class="${classes}" data-buy="${index}"${maxed ? ' aria-disabled="true"' : ''}>
+          <strong>${upgrade.name}</strong>
+          <span class="pips" aria-hidden="true">${'&#9679;'.repeat(level)}${'&#9675;'.repeat(upgrade.maxLevel - level)}</span>
+          <span class="sr-only">Level ${level} of ${upgrade.maxLevel}.</span>
+          <small>${upgrade.description}</small>
+          <span class="cost">${costText}</span>
+        </button>
       </li>`;
   }).join('');
-  return `<ul class="shop">${items}</ul>`;
+  return `<ul class="shop" aria-label="Upgrades">${items}</ul>`;
 }
 
 function levelUpHtml() {
   if (levelUpChoices.length === 0) {
-    return '<p>Every upgrade is maxed out! Press <kbd>Space</kbd> to continue</p>';
+    return `
+      <p>Every upgrade is maxed out!</p>
+      <button type="button" class="primary" data-pick="0">Continue</button>`;
   }
   const items = levelUpChoices.map(
     (upgrade, index) => `
-      <li class="${index === levelUpIndex ? 'selected' : ''}" data-pick="${index}">
-        <kbd>${index + 1}</kbd>
-        <strong>${upgrade.name}</strong>
-        <small>${upgrade.description}</small>
-        <span class="stacks">${getStacks(upgrade)}/${upgrade.maxStacks}</span>
+      <li>
+        <button type="button" class="${index === levelUpIndex ? 'selected' : ''}" data-pick="${index}">
+          <kbd>${index + 1}</kbd>
+          <strong>${upgrade.name}</strong>
+          <small>${upgrade.description}</small>
+          <span class="stacks">${getStacks(upgrade)}/${upgrade.maxStacks}<span class="sr-only"> taken</span></span>
+        </button>
       </li>`
   ).join('');
-  return `<ul class="choices">${items}</ul>`;
+  return `<ul class="choices" aria-label="Upgrade choices">${items}</ul>`;
 }
 
 // 'start' | 'shop' | 'playing' | 'paused' | 'levelup' | 'gameover'
@@ -180,45 +211,78 @@ let shopReturnState = 'start';
 let levelUpChoices = [];
 let levelUpIndex = 0;
 
+// Difficulty level last read out to screen readers
+let announcedLevel = 1;
+
+const UPGRADES_BUTTON_HTML =
+  '<button type="button" class="link" data-shop>Upgrades <kbd>U</kbd></button>';
+
 function renderOverlay() {
+  // Keyboard users moving through the mode buttons stay on them after a re-render
+  const modeHadFocus = overlay.contains(document.activeElement) && document.activeElement.dataset.mode !== undefined;
+
   overlay.classList.toggle('game-over', state === 'gameover');
   overlay.hidden = state === 'playing';
 
   if (state === 'start') {
     overlay.innerHTML = `
-      <h1>Tode's Escape</h1>
+      <h1 id="overlay-title">Tode's Escape</h1>
       <p>Choose a mode with <kbd>A</kbd>/<kbd>D</kbd>, then press <kbd>Space</kbd> to start</p>
       ${modeListHtml()}
+      <button type="button" class="primary" data-start>Start</button>
       <p class="best">Best in ${getMode().name}: ${getHighScore()}</p>
-      <p class="coins">Coins: ${getCoins()} &middot; <span class="link" data-shop>Press <kbd>U</kbd> for upgrades</span></p>
+      <p class="coins">Coins: ${getCoins()} &middot; ${UPGRADES_BUTTON_HTML}</p>
       ${CONTROLS_HTML}`;
   } else if (state === 'shop') {
     overlay.innerHTML = `
-      <h1>Upgrades</h1>
+      <h1 id="overlay-title">Upgrades</h1>
       <p class="coins">Coins: ${getCoins()}</p>
       ${shopHtml()}
+      <button type="button" class="link" data-back>Back <kbd>Esc</kbd></button>
       <p class="controls">
         <kbd>W</kbd>/<kbd>S</kbd> choose &middot; <kbd>Space</kbd> buy &middot; <kbd>U</kbd> or <kbd>Esc</kbd> back
       </p>`;
   } else if (state === 'levelup') {
     overlay.innerHTML = `
-      <h1>Level up!</h1>
+      <h1 id="overlay-title">Level up!</h1>
       <p>Pick an upgrade for this run</p>
       ${levelUpHtml()}
       <p class="controls"><kbd>1</kbd>/<kbd>2</kbd>/<kbd>3</kbd> or <kbd>A</kbd>/<kbd>D</kbd> and <kbd>Space</kbd></p>`;
   } else if (state === 'paused') {
     overlay.innerHTML = `
-      <h1>Paused</h1>
-      <p>Press <kbd>P</kbd> to continue</p>`;
+      <h1 id="overlay-title">Paused</h1>
+      <button type="button" class="primary" data-resume>Resume</button>
+      <p class="controls">Press <kbd>P</kbd> or <kbd>Esc</kbd> to continue</p>`;
   } else if (state === 'gameover') {
     overlay.innerHTML = `
-      <h1>Game Over</h1>
+      <h1 id="overlay-title">Game Over</h1>
       <p class="final">Score: ${lastRun.score}</p>
       ${lastRun.newHighScore ? '<p class="new-best">New high score!</p>' : `<p class="best">Best in ${getMode().name}: ${getHighScore()}</p>`}
-      <p class="coins">+${lastRun.coins} coins &middot; ${getCoins()} total &middot; <span class="link" data-shop>Press <kbd>U</kbd> for upgrades</span></p>
+      <p class="coins">+${lastRun.coins} coins &middot; ${getCoins()} total &middot; ${UPGRADES_BUTTON_HTML}</p>
+      <button type="button" class="primary" data-start>Play again</button>
       <p>Press <kbd>Space</kbd> to play again</p>
       ${modeListHtml()}`;
   }
+
+  focusSelection(modeHadFocus);
+}
+
+// Put keyboard focus on the current choice, so Tab, Enter and screen readers start from it
+function focusSelection(modeHadFocus) {
+  let selector = null;
+  if (state === 'start' || state === 'gameover') {
+    selector = modeHadFocus ? '[data-mode][aria-pressed="true"]' : '[data-start]';
+  } else if (state === 'shop') {
+    selector = `[data-buy="${shopIndex}"]`;
+  } else if (state === 'levelup') {
+    selector = `[data-pick="${levelUpIndex}"]`;
+  } else if (state === 'paused') {
+    selector = '[data-resume]';
+  }
+
+  const target = selector && overlay.querySelector(selector);
+  if (target) target.focus();
+  else if (overlay.contains(document.activeElement)) document.activeElement.blur();
 }
 
 function gameOver() {
@@ -228,6 +292,7 @@ function gameOver() {
   const coins = Math.floor(score * getStats().coinGain);
   addCoins(coins);
   lastRun = { score, newHighScore: stopScore(), coins };
+  announce(`Game over. Score ${score}.${lastRun.newHighScore ? ' New high score!' : ''} Earned ${coins} coins.`);
   renderOverlay();
 }
 
@@ -237,8 +302,28 @@ function startGame() {
   resetEnemies(scene);
   resetAttack();
   resetScore();
+  announcedLevel = getLevel(0);
   player.visible = true;
   state = 'playing';
+  renderOverlay();
+}
+
+function pauseGame() {
+  state = 'paused';
+  renderOverlay();
+}
+
+function resumeGame() {
+  // Keys pressed while paused were meant for the menu, not for the game
+  clearAttackRequest();
+  clearQueuedMoves();
+  state = 'playing';
+  renderOverlay();
+}
+
+function selectMode(key) {
+  setModeByKey(key);
+  announce(`${getMode().name} mode`);
   renderOverlay();
 }
 
@@ -260,7 +345,14 @@ function closeShop() {
 
 function buyAt(index) {
   shopIndex = index;
-  buyUpgrade(BASE_UPGRADES[index]);
+  const upgrade = BASE_UPGRADES[index];
+  if (buyUpgrade(upgrade)) {
+    announce(`Bought ${upgrade.name}, level ${getUpgradeLevel(upgrade)}. ${getCoins()} coins left.`);
+  } else if (isMaxed(upgrade)) {
+    announce(`${upgrade.name} is already maxed.`);
+  } else {
+    announce(`Not enough coins for ${upgrade.name}.`);
+  }
   renderOverlay();
 }
 
@@ -289,11 +381,11 @@ function handleMenuKey(event) {
     startGame();
   } else if (event.code === 'KeyU') {
     openShop();
-  } else if (setModeByKey(event.key)) {
-    renderOverlay();
+  } else if (MODES.some((mode) => mode.key === event.key)) {
+    selectMode(event.key);
   } else if (MENU_STEPS[event.code]) {
     cycleMode(MENU_STEPS[event.code]);
-    renderOverlay();
+    selectMode(getMode().key);
   }
 }
 
@@ -325,6 +417,14 @@ function handleLevelUpKey(event) {
 window.addEventListener('keydown', (event) => {
   if (event.repeat) return;
 
+  // Space or Enter on a focused overlay button presses that button, and only that button
+  const focusedButton = overlay.contains(document.activeElement) ? document.activeElement.closest('button') : null;
+  if (focusedButton && CONFIRM_KEYS.includes(event.code)) {
+    event.preventDefault();
+    focusedButton.click();
+    return;
+  }
+
   if (state === 'start' || state === 'gameover') {
     handleMenuKey(event);
   } else if (state === 'shop') {
@@ -332,31 +432,55 @@ window.addEventListener('keydown', (event) => {
   } else if (state === 'levelup') {
     handleLevelUpKey(event);
   } else if (event.code === 'KeyP' || event.code === 'Escape') {
-    state = state === 'playing' ? 'paused' : 'playing';
-    renderOverlay();
+    if (state === 'playing') pauseGame();
+    else resumeGame();
   }
 });
 
-// Mouse support for the shop, the level-up cards and the upgrades link
-overlay.addEventListener('click', (event) => {
-  const target = event.target.closest('[data-buy], [data-pick], [data-shop]');
-  if (!target) return;
+// The keydown handler above already pressed the button; stop the browser pressing it again on keyup
+window.addEventListener('keyup', (event) => {
+  if (CONFIRM_KEYS.includes(event.code) && overlay.contains(document.activeElement)) event.preventDefault();
+});
 
-  if (target.dataset.buy !== undefined && state === 'shop') {
-    buyAt(Number(target.dataset.buy));
-  } else if (target.dataset.pick !== undefined && state === 'levelup') {
-    chooseUpgrade(Number(target.dataset.pick));
-  } else if (target.dataset.shop !== undefined && (state === 'start' || state === 'gameover')) {
+// Overlay buttons: mouse, touch, Tab + Enter, and screen readers all come through here
+overlay.addEventListener('click', (event) => {
+  const target = event.target.closest('button');
+  if (!target) return;
+  const { dataset } = target;
+  const inMenu = state === 'start' || state === 'gameover';
+
+  if (dataset.buy !== undefined && state === 'shop') {
+    buyAt(Number(dataset.buy));
+  } else if (dataset.back !== undefined && state === 'shop') {
+    closeShop();
+  } else if (dataset.pick !== undefined && state === 'levelup') {
+    chooseUpgrade(Number(dataset.pick));
+  } else if (dataset.shop !== undefined && inMenu) {
     openShop();
+  } else if (dataset.mode !== undefined && inMenu) {
+    selectMode(dataset.mode);
+  } else if (dataset.start !== undefined && inMenu) {
+    startGame();
+  } else if (dataset.resume !== undefined && state === 'paused') {
+    resumeGame();
+  }
+});
+
+// Tabbing through the shop or level-up cards moves the selection with the focus
+overlay.addEventListener('focusin', (event) => {
+  const { buy, pick } = event.target.dataset;
+  if (buy === undefined && pick === undefined) return;
+
+  if (buy !== undefined) shopIndex = Number(buy);
+  if (pick !== undefined) levelUpIndex = Number(pick);
+  for (const card of overlay.querySelectorAll('[data-buy], [data-pick]')) {
+    card.classList.toggle('selected', card === event.target);
   }
 });
 
 // Pause automatically when the player switches away from the tab
 document.addEventListener('visibilitychange', () => {
-  if (document.hidden && state === 'playing') {
-    state = 'paused';
-    renderOverlay();
-  }
+  if (document.hidden && state === 'playing') pauseGame();
 });
 
 const playerTouchesEnemy = () =>
@@ -386,6 +510,8 @@ function absorbHit() {
   for (const enemy of nearby) defeatEnemy(scene, enemy);
   addKills(nearby.length);
   addKillXp(nearby.length);
+  const shieldsLeft = getStats().shields;
+  announce(`Shield used. ${shieldsLeft} ${shieldsLeft === 1 ? 'shield' : 'shields'} left.`);
 
   // Restart the CSS flash animation
   document.body.classList.remove('shield-flash');
@@ -394,7 +520,12 @@ function absorbHit() {
 }
 
 function updateHud() {
-  levelElement.textContent = `${getMode().name} · Level ${getLevel(getScore())}`;
+  const level = getLevel(getScore());
+  levelElement.textContent = `${getMode().name} · Level ${level}`;
+  if (state === 'playing' && level > announcedLevel) {
+    announcedLevel = level;
+    announce(`Level ${level}`);
+  }
   const readiness = getAttackReadiness();
   attackMeterFill.style.transform = `scaleX(${readiness})`;
   attackMeter.classList.toggle('ready', readiness >= 1);

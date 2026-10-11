@@ -1,2 +1,3 @@
 - Make changes in the `game` directory only
 - Don't look for or run tests
+- make sure you document all the upgrades
