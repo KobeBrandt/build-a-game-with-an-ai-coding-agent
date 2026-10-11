@@ -1,14 +1,20 @@
 import * as THREE from 'three';
-import { defeatEnemy } from './Enemy.js';
+import { damageEnemy } from './Enemy.js';
 import { getFacing } from './Player.js';
 import { isTouching, overlapsObstacle } from './Collision.js';
 
 // Attacks the player picks from on the start and game over screens.
-// `cooldown` is the base seconds between uses; cooldown and reach upgrades scale every attack.
+// `cooldown` is the base seconds between uses and `damage` the base damage per hit;
+// cooldown, reach and damage upgrades scale every attack.
+// Damage is balanced against how each attack hits (enemy health is set per mode in Modes.js):
+// - Shockwave is slow, short and must be aimed by moving, but hits every enemy around Tode,
+//   so it hits hardest (one-shots a fresh Classic enemy).
+// - Tongue fires on its own at one enemy at a time, so it hits softest but most often.
+// - Spit pierces a whole line of enemies, so it sits in between.
 export const ATTACKS = [
-  { id: 'shockwave', name: 'Shockwave', description: 'Space: hit everything around you', cooldown: 1, auto: false },
-  { id: 'tongue', name: 'Tongue', description: 'Auto: lashes the nearest enemy', cooldown: 0.55, auto: true },
-  { id: 'spit', name: 'Spit', description: 'Space: piercing shot ahead', cooldown: 0.7, auto: false },
+  { id: 'shockwave', name: 'Shockwave', description: 'Space: hit everything around you', cooldown: 1, damage: 10, auto: false },
+  { id: 'tongue', name: 'Tongue', description: 'Auto: lashes the nearest enemy', cooldown: 0.55, damage: 6, auto: true },
+  { id: 'spit', name: 'Spit', description: 'Space: piercing shot ahead', cooldown: 0.7, damage: 7, auto: false },
 ];
 
 // Shockwave tuning
@@ -88,14 +94,17 @@ const spitMaterial = new THREE.MeshStandardMaterial({ color: 0x9be564, emissive:
 // Current values, scaled by setAttackDifficulty
 let cooldownMultiplier = 1;
 let currentRadiusMultiplier = 1;
+let damageMultiplier = 1;
 
-export function setAttackDifficulty(newCooldownMultiplier, radiusMultiplier) {
+export function setAttackDifficulty(newCooldownMultiplier, radiusMultiplier, newDamageMultiplier = 1) {
   cooldownMultiplier = newCooldownMultiplier;
   currentRadiusMultiplier = radiusMultiplier;
+  damageMultiplier = newDamageMultiplier;
   attackCircle.scale.setScalar(radiusMultiplier);
 }
 
 const attackCooldown = () => currentAttack.cooldown * cooldownMultiplier;
+const attackDamage = () => currentAttack.damage * damageMultiplier;
 
 let cooldownRemaining = 0;
 let fadeRemaining = 0;
@@ -106,7 +115,8 @@ let attackRequested = false;
 let tongueElapsed = TONGUE_DURATION;
 let tongueLength = 0;
 
-// Spit globs in flight: { mesh, dirX, dirY, travelled, range }
+// Spit globs in flight: { mesh, dirX, dirY, travelled, range, damage, hit }
+// `hit` holds the enemies a glob already damaged, so a piercing glob hits each enemy once
 const globs = [];
 
 /**
@@ -127,18 +137,18 @@ window.addEventListener('keydown', (event) => {
 const distanceTo = (player, enemy) =>
   Math.hypot(enemy.position.x - player.position.x, enemy.position.y - player.position.y);
 
-// Remove every enemy whose body touches the attack area; returns how many were hit
+// Damage every enemy whose body touches the attack area; returns how many were defeated
 function hitEnemies(scene, player, enemies) {
   const radius = ATTACK_RADIUS * currentRadiusMultiplier;
-  let hits = 0;
+  const damage = attackDamage();
+  let kills = 0;
   for (let i = enemies.length - 1; i >= 0; i--) {
     const enemy = enemies[i];
     if (distanceTo(player, enemy) <= radius + enemy.userData.radius) {
-      defeatEnemy(scene, enemy);
-      hits++;
+      if (damageEnemy(scene, enemy, damage, player.position.x, player.position.y)) kills++;
     }
   }
-  return hits;
+  return kills;
 }
 
 function fireShockwave(scene, player, enemies) {
@@ -168,8 +178,7 @@ function lashTongue(scene, player, target) {
   tongueLength = Math.hypot(dx, dy);
   tongue.rotation.z = Math.atan2(dy, dx);
   tongueElapsed = 0;
-  defeatEnemy(scene, target);
-  return 1;
+  return damageEnemy(scene, target, attackDamage(), player.position.x, player.position.y) ? 1 : 0;
 }
 
 function shootSpit(scene, player) {
@@ -178,10 +187,18 @@ function shootSpit(scene, player) {
   mesh.position.set(player.position.x, player.position.y, SPIT_HEIGHT);
   mesh.castShadow = true;
   scene.add(mesh);
-  globs.push({ mesh, dirX: facing.x, dirY: facing.y, travelled: 0, range: SPIT_RANGE * currentRadiusMultiplier });
+  globs.push({
+    mesh,
+    dirX: facing.x,
+    dirY: facing.y,
+    travelled: 0,
+    range: SPIT_RANGE * currentRadiusMultiplier,
+    damage: attackDamage(),
+    hit: new Set(),
+  });
 }
 
-// Move every glob; each one defeats every enemy it touches and pops at its range or on a house
+// Move every glob; each one damages every enemy it touches (once) and pops at its range or on a house
 function updateGlobs(scene, delta, enemies) {
   let kills = 0;
   const glob = { position: null, userData: { radius: SPIT_RADIUS * currentRadiusMultiplier } };
@@ -197,9 +214,13 @@ function updateGlobs(scene, delta, enemies) {
     glob.position = mesh.position;
     for (let j = enemies.length - 1; j >= 0; j--) {
       const enemy = enemies[j];
+      if (entry.hit.has(enemy)) continue;
       if (isTouching(enemy.position.x, enemy.position.y, enemy.userData.radius, glob)) {
-        defeatEnemy(scene, enemy);
-        kills++;
+        entry.hit.add(enemy);
+        // Push the enemy along the glob's path, not back towards Tode
+        const fromX = enemy.position.x - entry.dirX;
+        const fromY = enemy.position.y - entry.dirY;
+        if (damageEnemy(scene, enemy, entry.damage, fromX, fromY)) kills++;
       }
     }
 

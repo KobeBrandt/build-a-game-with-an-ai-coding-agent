@@ -1,10 +1,12 @@
 // Game modes: presets for the two numbers that shape the enemy pressure
 // (see "Customize the difficulty" in the Adding enemies task).
 // A high spawn rate with slow enemies feels like a horde; a few fast enemies feel like a hunt.
+// `enemyHealth` is each enemy's starting health (see the damage values in Attack.js):
+// horde enemies are weak, hunters are tough.
 export const MODES = [
-  { key: '1', name: 'Classic', description: 'Balanced pressure', enemySpeed: 40, spawnDelay: 3, maxEnemies: 20 },
-  { key: '2', name: 'Horde', description: 'Many slow enemies', enemySpeed: 24, spawnDelay: 1.1, maxEnemies: 40 },
-  { key: '3', name: 'Hunter', description: 'Few fast enemies', enemySpeed: 75, spawnDelay: 6, maxEnemies: 6 },
+  { key: '1', name: 'Classic', description: 'Balanced pressure', enemySpeed: 40, spawnDelay: 3, maxEnemies: 20, enemyHealth: 10 },
+  { key: '2', name: 'Horde', description: 'Many slow enemies', enemySpeed: 24, spawnDelay: 1.1, maxEnemies: 40, enemyHealth: 6 },
+  { key: '3', name: 'Hunter', description: 'Few fast enemies', enemySpeed: 75, spawnDelay: 6, maxEnemies: 6, enemyHealth: 18 },
 ];
 
 let currentMode = MODES[0];
