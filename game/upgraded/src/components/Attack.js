@@ -164,6 +164,12 @@ const globs = [];
  */
 export const getCooldownRemaining = () => cooldownRemaining;
 
+/**
+ * True when a press now would fire: the cooldown is over, or close enough that the press is kept
+ * (see PRESS_BUFFER). The Tongue fires on its own, so only once its cooldown is over.
+ */
+export const isAttackReady = () => cooldownRemaining <= (currentAttack.auto ? 0 : PRESS_BUFFER);
+
 export function getAttackReadiness() {
   const cooldown = attackCooldown();
   return cooldown > 0 ? 1 - cooldownRemaining / cooldown : 1;
@@ -305,7 +311,7 @@ export function updateAttack(scene, delta, player, enemies) {
     if (attackRequested) {
       // An attack pressed on the beat hits harder and counts towards the combo
       const judgement = judge(attackPressTime);
-      registerJudgement(judgement);
+      registerJudgement(judgement, 'attack');
       const damage = attackDamage() * (judgement?.damage ?? 1);
       const onBeat = judgement !== null && judgement.grade !== 'miss';
       // On the beat, the cooldown counts from the beat itself, not from the press or this frame,

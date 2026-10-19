@@ -5,9 +5,11 @@ import {
   getBpm,
   getSecondsPerBeat,
   isMusicPlaying,
+  setFever,
   setTempo,
   SFX,
   startMusic,
+  stopMusic,
 } from './Audio.js';
 
 // Rhythm tuning. Hops and attacks pressed on the music's beat are judged:
@@ -26,6 +28,14 @@ const GREAT_DAMAGE = 1.2;
 const COMBO_STEP = 0.05; // score multiplier gained per combo
 const MAX_COMBO_BONUS = 1; // so the multiplier tops out at ×2 (combo 20)
 const IDLE_BEATS = 8; // beats of play without an on-beat press before the combo fades
+const FEVER_COMBO = 20; // combo that starts a fever (the same combo that maxes the score bonus)
+const HOP_GRID = 1 / 8; // hops last a whole number of 1/8 beats (see snapToBeatGrid)
+
+// Timing calibration: the player's input and audio delay, measured by tapping along to clicks
+const OFFSET_KEY = 'tode-audio-offset';
+const CALIBRATION_BPM = 100;
+const CALIBRATION_TAPS = 8; // taps needed before the offset can be saved
+const MAX_OFFSET = 0.3; // seconds; taps further off than this are ignored as stray
 const MIN_BPM = 80;
 const MAX_BPM = 160;
 // Fewest beats an attack's cooldown can last. Spit and Shockwave are pressed on beats, so at
@@ -47,6 +57,17 @@ let perfects = 0;
 let greats = 0;
 let idleBeats = 0;
 let lastJudgedBeat = -Infinity;
+
+function loadOffset() {
+  try {
+    const saved = Number(localStorage.getItem(OFFSET_KEY));
+    return Number.isFinite(saved) ? saved / 1000 : 0;
+  } catch {
+    return 0;
+  }
+}
+
+let inputOffset = loadOffset(); // seconds the player's presses land after the beat they hear
 
 // --- HUD: a beat track with markers sliding into the target, and the combo below it ---
 
@@ -159,8 +180,9 @@ export function getBeatCooldown(cooldown, auto) {
  * the press came after the beat (negative when early). Has no side effects.
  */
 export function judge(eventTimeStamp) {
-  const time = isMusicPlaying() ? audibleTime(eventTimeStamp) : null;
-  if (time === null) return null;
+  const heard = isMusicPlaying() ? audibleTime(eventTimeStamp) : null;
+  if (heard === null) return null;
+  const time = heard - inputOffset;
   const beat = beatAtTime(time);
   const nearest = Math.max(0, Math.round(beat));
   const offset = (beat - nearest) * getSecondsPerBeat(time);
@@ -170,12 +192,20 @@ export function judge(eventTimeStamp) {
   return { grade, beat: nearest, offset, damage: GRADES[grade].damage };
 }
 
+// Called with (judgement, source) for every counted judgement; main.js uses it for hit feedback
+let judgementListener = null;
+
+export function setJudgementListener(listener) {
+  judgementListener = listener;
+}
+
 /**
  * Count a judged press towards the combo, with sound and HUD feedback.
+ * `source` is 'hop' or 'attack'.
  * A second on-beat press on a beat that already counted (say, a hop and an attack together)
  * is ignored, so mashing every key on one beat doesn't pad the combo.
  */
-export function registerJudgement(judgement) {
+export function registerJudgement(judgement, source = 'hop') {
   if (!judgement) return;
   const { grade, beat } = judgement;
 
@@ -198,6 +228,7 @@ export function registerJudgement(judgement) {
     restartAnimation(target, 'hit');
   }
 
+  if (judgementListener) judgementListener(judgement, source);
   judgementElement.textContent = GRADES[grade].label;
   judgementElement.dataset.grade = grade;
   restartAnimation(judgementElement, 'show');
@@ -211,9 +242,17 @@ export function getComboMultiplier() {
   return 1 + Math.min(MAX_COMBO_BONUS, combo * COMBO_STEP);
 }
 
+/**
+ * True while the combo is at FEVER_COMBO or more: the music sings an octave-up double,
+ * the screen glows teal and Tode leaves a trail. The bonuses stay the same.
+ */
+export const isFever = () => combo >= FEVER_COMBO;
+
 function updateComboText() {
   comboElement.textContent = combo > 0 ? `Combo ${combo} · ×${getComboMultiplier().toFixed(2)}` : 'Hop on the beat!';
-  hud.classList.toggle('on-fire', getComboMultiplier() >= 1 + MAX_COMBO_BONUS);
+  hud.classList.toggle('on-fire', isFever());
+  document.body.classList.toggle('fever', isFever());
+  setFever(isFever());
 }
 
 // --- Run --------------------------------------------------------------------------
@@ -233,8 +272,89 @@ export function startRhythm(cooldown, auto) {
   startMusic(tempoForCooldown(cooldown, auto));
 }
 
+/**
+ * Beats since the run's music started (a float), or null without music.
+ */
+export const getCurrentBeat = () => beatAt(performance.now());
+
+/**
+ * Round a hop's length to a whole number of 1/8 beats (at least one), so a hop started on the
+ * beat lands on the music's grid. At 120 BPM the base hop (0.25 s) is exactly half a beat.
+ * Without music, `seconds` itself.
+ */
+export function snapToBeatGrid(seconds) {
+  if (!isMusicPlaying()) return seconds;
+  const grid = getSecondsPerBeat() * HOP_GRID;
+  return Math.max(1, Math.round(seconds / grid)) * grid;
+}
+
+/**
+ * End a run's music and its fever glow.
+ */
+export function stopRhythm() {
+  stopMusic();
+  setFever(false);
+  document.body.classList.remove('fever');
+}
+
 export function getRhythmStats() {
   return { bestCombo, perfects, greats };
+}
+
+// --- Timing calibration ------------------------------------------------------------
+
+let calibrationTaps = [];
+
+export function startCalibration() {
+  calibrationTaps = [];
+  startMusic(CALIBRATION_BPM, true);
+}
+
+export function stopCalibration() {
+  stopMusic();
+}
+
+const median = (values) => {
+  const sorted = [...values].sort((a, b) => a - b);
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
+};
+
+/**
+ * Record a tap at `eventTimeStamp` against the calibration clicks.
+ * Returns { taps, needed, offsetMs } where offsetMs is the median delay so far (null before any tap).
+ */
+export function addCalibrationTap(eventTimeStamp) {
+  const time = isMusicPlaying() ? audibleTime(eventTimeStamp) : null;
+  if (time !== null) {
+    const beat = beatAtTime(time);
+    const offset = (beat - Math.round(beat)) * getSecondsPerBeat(time);
+    // The first beat is a count-in; wild taps are ignored
+    if (beat >= 0.5 && Math.abs(offset) <= MAX_OFFSET) calibrationTaps.push(offset);
+  }
+  return getCalibration();
+}
+
+export function getCalibration() {
+  return {
+    taps: calibrationTaps.length,
+    needed: CALIBRATION_TAPS,
+    offsetMs: calibrationTaps.length ? Math.round(median(calibrationTaps) * 1000) : null,
+  };
+}
+
+export const getInputOffsetMs = () => Math.round(inputOffset * 1000);
+
+/**
+ * Save `offsetMs` as the player's timing offset; every judgement subtracts it from now on.
+ */
+export function setInputOffsetMs(offsetMs) {
+  inputOffset = offsetMs / 1000;
+  try {
+    localStorage.setItem(OFFSET_KEY, String(offsetMs));
+  } catch {
+    // Storage blocked: the setting just lasts for this visit
+  }
 }
 
 /**

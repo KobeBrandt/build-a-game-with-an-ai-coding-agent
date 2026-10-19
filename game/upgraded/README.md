@@ -44,7 +44,7 @@ Actions tab). To turn it on once, set **Settings > Pages > Source** to **GitHub 
 | Attack | Cooldown meter at the bottom of the screen, labelled with the chosen attack | `src/main.js`, `src/style.css` |
 | Attack | Three attacks to choose from on the start and game over screens: Shockwave, Tongue (fires on its own) and Spit. See [Attacks](#attacks) | `components/Attack.js`, `components/Player.js`, `src/main.js` |
 | Attack | Enemy health and balanced damage per attack: enemies take several hits, show a health bar once hurt, squash and get knocked back when hit. See [Enemy health and damage](#enemy-health-and-damage) | `components/Enemy.js`, `components/Attack.js`, `components/Modes.js`, `components/Difficulty.js` |
-| Score | Best score per mode, saved in the browser | `components/Score.js` |
+| Score | Best score per mode and attack, saved in the browser (each attack plays at its own tempo, so scores are only compared within one attack; older per-mode bests carry over to every attack) | `components/Score.js` |
 | Score | Score "pops" on every kill | `components/Score.js`, `src/style.css` |
 | Start, play, game over | Start screen with mode select and controls | `src/main.js` |
 | Start, play, game over | Pause with `P` or `Esc`, and auto-pause when the tab is hidden or the window loses focus | `src/main.js` |
@@ -197,6 +197,37 @@ Without audio (no Web Audio support), the cooldowns are the plain seconds and th
 | Sound effects | Hop, each attack, hit, kill, shield, level up, game over and judgement chimes; the chimes and kill blips use the notes of the current chord |
 | Game over | Shows the best combo and number of Perfects |
 
+### Feel and extras
+
+| Feature | What it does | Where |
+| --- | --- | --- |
+| Hops on the beat grid | A hop lasts a whole number of 1/8 beats, so a hop started on the beat lands on the music's grid. At 120 BPM the base hop (0.25 s) is exactly half a beat; hop speed upgrades step by 1/8 beat | `components/Player.js`, `components/Rhythm.js` |
+| Tode dances | Tode bounces a little on every beat while standing still, and squashes on landing (not with reduced motion) | `components/Player.js` |
+| Hoppers | Pink enemies that only move on the beat: they crouch just before it (the tell), then hop toward Tode. A hop covers a beat's worth of walking, so they average the same speed as walkers. None at level 1, then 10% of new enemies per level, up to 40% | `components/Enemy.js`, `src/main.js` |
+| Spawns on the beat | Regular spawns wait for the next beat | `components/Enemy.js` |
+| Loop waves | Each time the 4-bar loop starts again, a small wave spawns around Tode (Classic 1, Horde 3, Hunter 0, plus 1 for every 2 levels after the first), within the mode's enemy cap | `src/main.js`, `components/Enemy.js` |
+| The drop | The first time the lead comes in (level 4), a big wave spawns (Classic 4, Horde 8, Hunter 2) with a "Drop!" banner | `src/main.js` |
+| Fever | At combo 20 the music sings an octave-up double, the screen glows teal and Tode leaves a teal trail. The bonuses don't change | `components/Rhythm.js`, `components/Audio.js`, `src/main.js` |
+| Sung lead | The lead melody (level 4 and fever) is a voice synth: a sawtooth through three vowel formant filters with vibrato, singing "la" and "li" | `components/Audio.js` |
+| Hit feedback | Damage numbers float up from every hit (kills bigger and red); kills burst into cubes (pink for hoppers); a Perfect attack freezes the game for 0.05 s; kills, Perfect attacks, shields and the drop shake the camera (not with reduced motion) | `components/Effects.js`, `src/main.js` |
+| Attack meter | Turns ready as soon as a press would fire (the last 0.12 s of the cooldown keeps the press), instead of flickering on only on the beat | `components/Attack.js`, `src/main.js` |
+
+### Sound and timing settings
+
+Open with `O` or **Sound & timing** on the start and game over screens.
+
+- **Music** and **Sound effects** volume sliders (saved in `localStorage` key `tode-volume`).
+- **Timing offset**: Bluetooth headphones and some screens delay the sound by 100 to 250 ms, more than the Great window.
+  Press **Start tapping** and tap `Space`, `T` or the **Tap** button along with the clicks (100 BPM). After 8 taps,
+  **Use** saves the median delay (`localStorage` key `tode-audio-offset`), and every judgement subtracts it.
+  Mouse and finger taps are timed when they go down, not when the click ends. **Reset to 0** clears it.
+
+### Touch controls
+
+On touch screens (or once the screen is touched) a D-pad, an attack button and a pause button show during a run.
+They send the same key events as the keyboard at the moment the finger goes down, so they are judged against the beat the same way.
+The beat track and attack meter move up to make room. The attack button hides for the Tongue.
+
 ### Balance notes
 
 - On-beat play costs no attack speed (the cooldown lines up with the beat), so the bonuses are kept small: ×1.4 damage at most.
@@ -251,7 +282,7 @@ Built against WCAG 2.2 AA and the basic tier of the [Game Accessibility Guidelin
 | Font sizes in `rem`, no text smaller than 14px, title scales down on narrow screens, the overlay scrolls when zoomed in | 1.4.4 Resize Text, 1.4.10 Reflow | `src/style.css` |
 | Pause with `P`/`Esc` or the **Resume** button, auto-pause when the tab is hidden or the window loses focus; keys pressed while paused don't carry into the game | 2.2.2 Pause, Stop, Hide | `src/main.js` |
 
-Not done yet: adjustable game speed, key remapping and on-screen touch controls.
+Not done yet: adjustable game speed and key remapping.
 
 ## Controls
 
@@ -262,5 +293,6 @@ Not done yet: adjustable game speed, key remapping and on-screen touch controls.
 - `U`: open the upgrade shop from the start and game over screens (`W`/`S` choose, `Space` or `Enter` buy, `U`/`Esc` back)
 - Level up: `1` / `2` / `3`, or `A`/`D` and `Space`, or click a card
 - `P` or `Esc`: pause and resume
+- `O`: sound and timing settings (volumes, timing calibration) from the start and game over screens
 - `M`: sound on/off
 - `Tab` / `Shift+Tab`: move between buttons on any menu screen; `Enter` or `Space` presses the focused button

@@ -16,7 +16,10 @@ import {
   enemies,
   enemyReady,
   resetEnemies,
+  setDamageListener,
   setEnemyDifficulty,
+  setHopperChance,
+  spawnWave,
   updateDefeatedEnemies,
   updateEnemies,
 } from './components/Enemy.js';
@@ -28,6 +31,7 @@ import {
   getAttackReadiness,
   getCooldownRemaining,
   getRawCooldown,
+  isAttackReady,
   resetAttack,
   setAttackById,
   setAttackDifficulty,
@@ -61,19 +65,48 @@ import {
   rollChoices,
   useShield,
 } from './components/RunUpgrades.js';
-import { isMuted, pauseAudio, resumeAudio, setMusicIntensity, SFX, stopMusic, toggleMute } from './components/Audio.js';
 import {
+  getVolumes,
+  isMuted,
+  pauseAudio,
+  resumeAudio,
+  setMusicIntensity,
+  setVolume,
+  SFX,
+  toggleMute,
+} from './components/Audio.js';
+import {
+  addCalibrationTap,
   beatRing,
   followCooldown,
   getBeatPulse,
+  getCalibration,
   getComboMultiplier,
+  getCurrentBeat,
+  getInputOffsetMs,
   getRhythmStats,
+  isFever,
   judge,
   registerJudgement,
+  setInputOffsetMs,
+  setJudgementListener,
+  startCalibration,
   startRhythm,
+  stopCalibration,
+  stopRhythm,
   updateRhythm,
   updateRhythmHud,
 } from './components/Rhythm.js';
+import {
+  burst,
+  damageNumber,
+  getShakeOffset,
+  resetEffects,
+  shake,
+  trailMark,
+  updateEffects,
+} from './components/Effects.js';
+import { updateTouchControls } from './components/Touch.js';
 
 // Shadow tuning: the sun follows the player, so only the area around it needs a shadow map
 const SUN_OFFSET = new THREE.Vector3(-100, -100, 200);
@@ -81,6 +114,19 @@ const SHADOW_AREA = 600; // half-size of the square around the player that recei
 
 // A shield that absorbs a hit also knocks out every enemy this close to Tode
 const SHIELD_BLAST_RADIUS = 150;
+
+// Game feel
+const HITSTOP = 0.05; // seconds the game freezes on a Perfect attack
+const TRAIL_SPACING = 14; // world units between fever trail marks
+
+// Waves on the music's structure: every time the 4-bar loop starts again a wave joins in,
+// and the first time the lead comes in (level 4, the "drop") a big one does.
+const BEATS_PER_LOOP = 16;
+const WAVE_SIZE = { Classic: 1, Horde: 3, Hunter: 0 }; // plus 1 for every 2 levels after the first
+const DROP_WAVE_SIZE = { Classic: 4, Horde: 8, Hunter: 2 };
+const DROP_LEVEL = 4;
+// Share of new enemies that are hoppers: none at level 1, then 10% per level up to 40%
+const hopperChanceFor = (level) => (level >= 2 ? Math.min(0.4, 0.1 * level) : 0);
 
 const scene = new THREE.Scene();
 
@@ -114,6 +160,7 @@ const ENEMY_BOB_HEIGHT = 4;
 
 const camera = Camera();
 player.add(camera);
+const cameraRest = camera.position.clone(); // screen shake moves the camera around this point
 
 const renderer = Renderer();
 
@@ -142,6 +189,13 @@ runHud.innerHTML = '<div class="xp-bar"><div class="xp-bar-fill"></div><span>XP<
 document.body.appendChild(runHud);
 const xpBarFill = runHud.querySelector('.xp-bar-fill');
 const shieldsElement = runHud.querySelector('.shields');
+
+// "Drop!" banner for the big wave when the lead melody comes in
+const dropBanner = document.createElement('div');
+dropBanner.className = 'drop-banner';
+dropBanner.setAttribute('aria-hidden', 'true');
+dropBanner.textContent = 'Drop!';
+document.body.appendChild(dropBanner);
 
 // One overlay for the start, pause and game over screens.
 // Not aria-modal: that would hide the announcer below from some screen readers.
@@ -199,6 +253,7 @@ const CONTROLS_HTML = `
     &middot; <kbd>Space</kbd> attack (Tongue fires on its own)
     &middot; <kbd>P</kbd> pause
     &middot; <kbd>M</kbd> sound
+    &middot; <kbd>O</kbd> sound &amp; timing
   </p>
   <p class="controls rhythm-tip">Hop and attack on the beat for combos: on-beat attacks hit harder, and combos multiply kill points (up to &times;2). The beat follows your attack's cooldown, so faster attacks mean faster music</p>`;
 
@@ -251,8 +306,12 @@ function levelUpHtml() {
   return `<ul class="choices" aria-label="Upgrade choices">${items}</ul>`;
 }
 
-// 'start' | 'shop' | 'playing' | 'paused' | 'levelup' | 'gameover'
+// 'start' | 'shop' | 'settings' | 'playing' | 'paused' | 'levelup' | 'gameover'
 let state = 'start';
+
+// Sound and timing screen: the menu to go back to, and whether the tapping test is running
+let settingsReturnState = 'start';
+let calibrating = false;
 let lastRun = { score: 0, newHighScore: false, coins: 0, kills: 0, time: 0, bestCombo: 0, perfects: 0 };
 
 // Shop selection, and the menu screen to go back to
@@ -284,6 +343,48 @@ const startButtonHtml = (label) =>
 const UPGRADES_BUTTON_HTML =
   '<button type="button" class="link" data-shop>Upgrades <kbd>U</kbd></button>';
 
+const SETTINGS_BUTTON_HTML =
+  '<button type="button" class="link" data-settings>Sound &amp; timing <kbd>O</kbd></button>';
+
+const bestHtml = () => `<p class="best">Best in ${getMode().name} with ${getAttack().name}: ${getHighScore()}</p>`;
+
+// "+12 ms (you press after the beat)"
+function formatOffset(offsetMs) {
+  if (offsetMs === 0) return '0 ms';
+  const sign = offsetMs > 0 ? '+' : '−';
+  return `${sign}${Math.abs(offsetMs)} ms (you press ${offsetMs > 0 ? 'after' : 'before'} the beat)`;
+}
+
+function calibrationStatusText() {
+  const { taps, needed, offsetMs } = getCalibration();
+  if (!calibrating) return 'Press Start tapping, then tap along with the clicks.';
+  if (taps === 0) return `Tap along with the clicks: 0 of ${needed} taps.`;
+  return `${Math.min(taps, needed)} of ${needed} taps, measured ${formatOffset(offsetMs)}.`;
+}
+
+function settingsHtml() {
+  const volumes = getVolumes();
+  const { taps, needed, offsetMs } = getCalibration();
+  const canSave = calibrating && taps >= needed;
+  return `
+    <h1 id="overlay-title">Sound &amp; timing</h1>
+    <div class="settings">
+      <label>Music <input type="range" min="0" max="100" step="5" value="${Math.round(volumes.music * 100)}" data-volume="music"></label>
+      <label>Sound effects <input type="range" min="0" max="100" step="5" value="${Math.round(volumes.sfx * 100)}" data-volume="sfx"></label>
+      <p class="list-label">Timing offset: ${formatOffset(getInputOffsetMs())}</p>
+      <p class="calibration-hint">Bluetooth headphones and some screens delay the sound. Tap <kbd>Space</kbd> or the Tap button along with the clicks, and the game will shift its timing to match you.</p>
+      <p class="calibration-status" aria-live="polite">${calibrationStatusText()}</p>
+      <div class="settings-buttons">
+        ${calibrating
+          ? '<button type="button" class="primary tap-button" data-tap>Tap</button><button type="button" data-calibrate>Stop</button>'
+          : '<button type="button" class="primary" data-calibrate>Start tapping</button>'}
+        <button type="button" data-save-offset${canSave ? '' : ' disabled'}>Use ${canSave ? formatOffset(offsetMs).split(' (')[0] : 'measured offset'}</button>
+        <button type="button" data-reset-offset>Reset to 0</button>
+      </div>
+    </div>
+    <button type="button" class="link" data-back-settings>Back <kbd>Esc</kbd></button>`;
+}
+
 // "12 kills · survived 1:05"
 function formatRunStats() {
   const seconds = Math.floor(lastRun.time);
@@ -313,9 +414,11 @@ function renderOverlay() {
       ${modeListHtml()}
       ${attackListHtml()}
       ${startButtonHtml('Start')}
-      <p class="best">Best in ${getMode().name}: ${getHighScore()}</p>
-      <p class="coins">Coins: ${getCoins()} &middot; ${UPGRADES_BUTTON_HTML}</p>
+      ${bestHtml()}
+      <p class="coins">Coins: ${getCoins()} &middot; ${UPGRADES_BUTTON_HTML} &middot; ${SETTINGS_BUTTON_HTML}</p>
       ${CONTROLS_HTML}`;
+  } else if (state === 'settings') {
+    html = settingsHtml();
   } else if (state === 'shop') {
     html = `
       <h1 id="overlay-title">Upgrades</h1>
@@ -343,8 +446,8 @@ function renderOverlay() {
       <p class="final">Score: ${lastRun.score}</p>
       <p class="run-stats">${formatRunStats()}</p>
       <p class="run-stats">${formatRhythmStats()}</p>
-      ${lastRun.newHighScore ? '<p class="new-best">New high score!</p>' : `<p class="best">Best in ${getMode().name}: ${getHighScore()}</p>`}
-      <p class="coins">+${lastRun.coins} coins &middot; ${getCoins()} total &middot; ${UPGRADES_BUTTON_HTML}</p>
+      ${lastRun.newHighScore ? '<p class="new-best">New high score!</p>' : bestHtml()}
+      <p class="coins">+${lastRun.coins} coins &middot; ${getCoins()} total &middot; ${UPGRADES_BUTTON_HTML} &middot; ${SETTINGS_BUTTON_HTML}</p>
       ${startButtonHtml('Play again')}
       <p>Press <kbd>Space</kbd> to play again</p>
       ${modeListHtml()}
@@ -366,6 +469,8 @@ function focusSelection(listFocus) {
     selector = `[data-pick="${levelUpIndex}"]`;
   } else if (state === 'paused') {
     selector = '[data-resume]';
+  } else if (state === 'settings') {
+    selector = calibrating ? '[data-tap]' : '[data-calibrate]';
   }
 
   const target = selector && overlay.querySelector(selector);
@@ -380,7 +485,7 @@ function gameOver() {
   const coins = Math.floor(score * getStats().coinGain);
   addCoins(coins);
   lastRun = { score, newHighScore: stopScore(), coins, ...getRunStats(), ...getRhythmStats() };
-  stopMusic();
+  stopRhythm();
   SFX.gameOver();
   announce(
     `Game over. Score ${score}.${lastRun.newHighScore ? ' New high score!' : ''} ${lastRun.kills} kills. Earned ${coins} coins.`
@@ -395,6 +500,11 @@ function startGame() {
   resetEnemies(scene);
   resetAttack(scene);
   resetScore();
+  resetEffects();
+  lastWaveLoop = 0;
+  dropDone = false;
+  wasFever = false;
+  hitstop = 0;
   // The music's tempo comes from the attack's starting cooldown, so set the run's stats first
   applyDifficulty(0);
   startRhythm(getRawCooldown(), getAttack().auto);
@@ -438,6 +548,61 @@ const ATTACK_STEPS = { KeyQ: -1, KeyE: 1 };
 const MENU_STEPS = { KeyA: -1, ArrowLeft: -1, KeyD: 1, ArrowRight: 1 };
 const SHOP_STEPS = { KeyW: -1, ArrowUp: -1, KeyS: 1, ArrowDown: 1 };
 const CONFIRM_KEYS = ['Space', 'Enter', 'NumpadEnter'];
+
+function openSettings() {
+  settingsReturnState = state;
+  state = 'settings';
+  renderOverlay();
+}
+
+function closeSettings() {
+  if (calibrating) stopCalibration();
+  calibrating = false;
+  state = settingsReturnState;
+  renderOverlay();
+}
+
+function toggleCalibration() {
+  calibrating = !calibrating;
+  if (calibrating) startCalibration();
+  else stopCalibration();
+  renderOverlay();
+}
+
+// Update only the tap count, so the Tap button keeps its focus between taps
+function calibrationTap(timeStamp) {
+  if (!calibrating) return;
+  const { taps, needed, offsetMs } = addCalibrationTap(timeStamp);
+  overlay.querySelector('.calibration-status').textContent = calibrationStatusText();
+  const save = overlay.querySelector('[data-save-offset]');
+  if (taps >= needed) {
+    save.disabled = false;
+    save.textContent = `Use ${formatOffset(offsetMs).split(' (')[0]}`;
+  }
+}
+
+function saveOffset() {
+  const { taps, needed, offsetMs } = getCalibration();
+  if (!calibrating || taps < needed) return;
+  setInputOffsetMs(offsetMs);
+  stopCalibration();
+  calibrating = false;
+  announce(`Timing offset set to ${offsetMs} milliseconds.`);
+  renderOverlay();
+}
+
+function resetOffset() {
+  setInputOffsetMs(0);
+  announce('Timing offset reset.');
+  renderOverlay();
+}
+
+function handleSettingsKey(event) {
+  if (['Escape', 'Backspace', 'KeyO'].includes(event.code)) {
+    event.preventDefault();
+    closeSettings();
+  }
+}
 
 function openShop() {
   shopReturnState = state;
@@ -490,6 +655,8 @@ function handleMenuKey(event) {
     startGame();
   } else if (event.code === 'KeyU') {
     openShop();
+  } else if (event.code === 'KeyO') {
+    openSettings();
   } else if (MODES.some((mode) => mode.key === event.key)) {
     selectMode(event.key);
   } else if (MENU_STEPS[event.code]) {
@@ -535,6 +702,13 @@ window.addEventListener('keydown', (event) => {
     return;
   }
 
+  // The tapping test takes Space and T as taps, timed by the key going down
+  if (state === 'settings' && calibrating && ['Space', 'KeyT'].includes(event.code)) {
+    event.preventDefault();
+    calibrationTap(event.timeStamp);
+    return;
+  }
+
   // Hops are judged against the beat the moment the key goes down (attacks when they fire)
   if (state === 'playing' && isMoveKey(event.code)) {
     registerJudgement(judge(event.timeStamp));
@@ -553,6 +727,8 @@ window.addEventListener('keydown', (event) => {
     handleMenuKey(event);
   } else if (state === 'shop') {
     handleShopKey(event);
+  } else if (state === 'settings') {
+    handleSettingsKey(event);
   } else if (state === 'levelup') {
     handleLevelUpKey(event);
   } else if (event.code === 'KeyP' || event.code === 'Escape') {
@@ -581,6 +757,19 @@ overlay.addEventListener('click', (event) => {
     chooseUpgrade(Number(dataset.pick));
   } else if (dataset.shop !== undefined && inMenu) {
     openShop();
+  } else if (dataset.settings !== undefined && inMenu) {
+    openSettings();
+  } else if (dataset.calibrate !== undefined && state === 'settings') {
+    toggleCalibration();
+  } else if (dataset.tap !== undefined && state === 'settings') {
+    // Pointer taps are timed on pointerdown (below); this is Enter on the focused button
+    if (event.detail === 0) calibrationTap(event.timeStamp);
+  } else if (dataset.saveOffset !== undefined && state === 'settings') {
+    saveOffset();
+  } else if (dataset.resetOffset !== undefined && state === 'settings') {
+    resetOffset();
+  } else if (dataset.backSettings !== undefined && state === 'settings') {
+    closeSettings();
   } else if (dataset.mode !== undefined && inMenu) {
     selectMode(dataset.mode);
   } else if (dataset.attack !== undefined && inMenu) {
@@ -590,6 +779,19 @@ overlay.addEventListener('click', (event) => {
   } else if (dataset.resume !== undefined && state === 'paused') {
     resumeGame();
   }
+});
+
+// A tap with a finger or mouse is timed when it goes down: a click only fires when it comes up
+overlay.addEventListener('pointerdown', (event) => {
+  if (state === 'settings' && event.target.closest('[data-tap]')) calibrationTap(event.timeStamp);
+});
+
+// Volume sliders: the sound effects slider plays a hit so you can hear the new level
+overlay.addEventListener('input', (event) => {
+  const kind = event.target.dataset.volume;
+  if (!kind) return;
+  setVolume(kind, Number(event.target.value) / 100);
+  if (kind === 'sfx') SFX.hit();
 });
 
 // Tabbing through the shop or level-up cards moves the selection with the focus
@@ -637,8 +839,12 @@ function absorbHit() {
       Math.hypot(enemy.position.x - player.position.x, enemy.position.y - player.position.y) <=
       SHIELD_BLAST_RADIUS + enemy.userData.radius
   );
-  for (const enemy of nearby) defeatEnemy(scene, enemy);
+  for (const enemy of nearby) {
+    burst(scene, enemy.position, 0x90ee90, 6);
+    defeatEnemy(scene, enemy);
+  }
   SFX.shield();
+  shake(5);
   addKills(nearby.length);
   addKillXp(nearby.length);
   const shieldsLeft = getStats().shields;
@@ -663,7 +869,8 @@ function updateHud() {
   attackMeterLabel.textContent = attack.auto ? `${attack.name} (auto)` : attack.name;
   const readiness = getAttackReadiness();
   attackMeterFill.style.transform = `scaleX(${readiness})`;
-  attackMeter.classList.toggle('ready', readiness >= 1);
+  // Ready as soon as a press would fire (the last moment of the cooldown keeps the press)
+  attackMeter.classList.toggle('ready', isAttackReady());
 
   // Before the first run, show the shields the shop's base upgrades will give
   const stats = getStats();
@@ -677,7 +884,78 @@ function updateHud() {
     attack.auto ? null : getCooldownRemaining()
   );
   const bob = reducedMotion.matches ? 0 : getBeatPulse() * ENEMY_BOB_HEIGHT;
-  for (const enemy of enemies) enemy.position.z = bob;
+  // Hoppers move up and down with their own hops
+  for (const enemy of enemies) if (!enemy.userData.hopper) enemy.position.z = bob;
+
+  updateTouchControls(state === 'playing', attack.auto);
+}
+
+// --- Feedback for hits, judgements and fever ---
+
+// Damage numbers and particles on every hit; kills burst bigger, hoppers in pink
+setDamageListener((enemy, amount, defeated) => {
+  damageNumber(enemy.position, amount, defeated);
+  if (defeated) {
+    burst(scene, enemy.position, enemy.userData.hopper ? 0xe12885 : 0x9be564, 10);
+    shake(1.5);
+  }
+});
+
+// A Perfect attack freezes the game for a moment and kicks the camera
+setJudgementListener((judgement, source) => {
+  if (source === 'attack' && judgement.grade === 'perfect') {
+    hitstop = HITSTOP;
+    shake(3);
+  }
+});
+
+let hitstop = 0;
+let wasFever = false;
+const lastTrailPosition = new THREE.Vector2();
+
+function updateFever() {
+  const fever = isFever();
+  if (fever && !wasFever) {
+    announce('Fever!');
+    lastTrailPosition.set(player.position.x, player.position.y);
+  }
+  wasFever = fever;
+  if (!fever) return;
+  if (lastTrailPosition.distanceTo(player.position) >= TRAIL_SPACING) {
+    trailMark(scene, player.position);
+    lastTrailPosition.set(player.position.x, player.position.y);
+  }
+}
+
+// --- Waves on the music's structure ---
+
+let lastWaveLoop = 0;
+let dropDone = false;
+
+function showDropBanner() {
+  dropBanner.classList.remove('show');
+  void dropBanner.offsetWidth;
+  dropBanner.classList.add('show');
+}
+
+function updateWaves(level) {
+  setHopperChance(hopperChanceFor(level));
+  const beat = getCurrentBeat();
+  if (beat === null) return;
+
+  if (!dropDone && level >= DROP_LEVEL) {
+    dropDone = true;
+    spawnWave(scene, player, DROP_WAVE_SIZE[getMode().name]);
+    showDropBanner();
+    shake(4);
+    announce('Drop! A big wave is coming.');
+  }
+
+  const loop = Math.floor(beat / BEATS_PER_LOOP);
+  if (loop > lastWaveLoop) {
+    lastWaveLoop = loop;
+    spawnWave(scene, player, WAVE_SIZE[getMode().name] + Math.floor((level - 1) / 2));
+  }
 }
 
 const clock = new THREE.Clock();
@@ -689,9 +967,14 @@ renderer.setAnimationLoop(() => {
   // Cap the step so a long frame (e.g. after a hitch) can't teleport anything
   const delta = Math.min(clock.getDelta(), 0.1);
 
-  if (state === 'playing') {
+  // A hitstop freezes the game (not the music) for a moment
+  const frozen = hitstop > 0;
+  hitstop = Math.max(0, hitstop - delta);
+
+  if (state === 'playing' && !frozen) {
     applyDifficulty(getScore());
     followCooldown(getRawCooldown(), getAttack().auto);
+    updateWaves(getLevel(getScore()));
 
     const playerHit = updatePlayer(delta);
     const enemyHit = playerHit || updateEnemies(scene, delta, player);
@@ -705,6 +988,7 @@ renderer.setAnimationLoop(() => {
       addKillXp(kills);
       addSurvivalXp(delta);
       updateScore(delta);
+      updateFever();
       if (hasPendingLevelUp()) openLevelUp();
     }
   }
@@ -712,6 +996,8 @@ renderer.setAnimationLoop(() => {
 
   updateHud();
   updateMap(map, player.position);
+  updateEffects(state === 'paused' || state === 'levelup' ? 0 : delta, camera);
+  camera.position.copy(cameraRest).add(getShakeOffset());
 
   directionalLight.target.position.set(player.position.x, player.position.y, 0);
   directionalLight.position.copy(directionalLight.target.position).add(SUN_OFFSET);

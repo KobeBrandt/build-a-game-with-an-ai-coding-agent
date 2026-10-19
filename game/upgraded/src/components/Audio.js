@@ -5,6 +5,7 @@
 // (Rhythm.js sets it from the attack's cooldown); a new tempo starts on the next bar.
 
 const MUTE_KEY = 'tode-muted';
+const VOLUME_KEY = 'tode-volume';
 const MASTER_VOLUME = 0.5;
 const MUSIC_VOLUME = 0.55;
 const SFX_VOLUME = 0.8;
@@ -23,11 +24,19 @@ const CHORDS = [
 ];
 // Which chord tone the arpeggio plays on each 16th step of a bar (-1 = rest)
 const ARP_PATTERN = [0, 2, 1, 3, 2, 1, 3, 2, 0, 2, 1, 3, 2, 3, 1, -1];
-// Lead melody, one note (MIDI) per 8th note of the 4-bar loop (0 = rest), only at high levels
+// Lead melody, one note (MIDI) per 8th note of the 4-bar loop (0 = rest), sung by the voice synth
+// from level 4 and in fever
 const LEAD = [
   76, 0, 79, 81, 79, 76, 74, 0, 72, 0, 74, 76, 0, 72, 69, 0,
   72, 0, 76, 79, 76, 72, 0, 74, 79, 0, 76, 74, 72, 74, 76, 0,
 ];
+
+// Vowel formants (Hz) for the voice synth: the lead sings "la" and "li"
+const VOWELS = {
+  a: [800, 1150, 2900],
+  i: [300, 2300, 3000],
+};
+const L_FORMANTS = [350, 1100, 2700]; // the "l" each syllable starts from
 
 const midiToHz = (note) => 440 * 2 ** ((note - 69) / 12);
 
@@ -40,6 +49,18 @@ function loadMuted() {
 }
 
 let muted = loadMuted();
+
+// Music and sound effect volumes, each 0 to 1 (on top of the mix levels above)
+function loadVolumes() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(VOLUME_KEY));
+    return { music: saved?.music ?? 1, sfx: saved?.sfx ?? 1 };
+  } catch {
+    return { music: 1, sfx: 1 };
+  }
+}
+
+const volumes = loadVolumes();
 let context = null;
 let master = null;
 let sfxBus = null;
@@ -57,6 +78,8 @@ let nextStep = 0; // next 16th step to schedule
 let nextStepTime = 0; // audio time of that step
 let schedulerId = null;
 let intensity = 1; // 1 = drums and bass, 2 = + snare and arpeggio, 3 = + lead
+let fever = false; // a combo fever adds the lead (and an octave-up double) at any intensity
+let metronome = false; // calibration: just a click on every beat
 
 /**
  * Create the audio context. Browsers only allow this after a click or key press,
@@ -77,7 +100,7 @@ export function ensureAudio() {
   master.connect(limiter).connect(context.destination);
 
   sfxBus = context.createGain();
-  sfxBus.gain.value = SFX_VOLUME;
+  sfxBus.gain.value = SFX_VOLUME * volumes.sfx;
   sfxBus.connect(master);
 
   // One second of white noise, shared by the drums and the shockwave
@@ -100,6 +123,25 @@ export function toggleMute() {
   }
   if (master) master.gain.setTargetAtTime(muted ? 0 : MASTER_VOLUME, context.currentTime, 0.02);
   return muted;
+}
+
+export function getVolumes() {
+  return { ...volumes };
+}
+
+/**
+ * Set the 'music' or 'sfx' volume (0 to 1); saved between visits.
+ */
+export function setVolume(kind, value) {
+  volumes[kind] = Math.min(1, Math.max(0, value));
+  try {
+    localStorage.setItem(VOLUME_KEY, JSON.stringify(volumes));
+  } catch {
+    // Storage blocked: the setting just lasts for this visit
+  }
+  if (!context) return;
+  if (kind === 'sfx') sfxBus.gain.setTargetAtTime(SFX_VOLUME * volumes.sfx, context.currentTime, 0.02);
+  if (kind === 'music' && musicBus) musicBus.gain.setTargetAtTime(MUSIC_VOLUME * volumes.music, context.currentTime, 0.02);
 }
 
 /**
@@ -159,6 +201,10 @@ export function setMusicIntensity(level) {
   intensity = level;
 }
 
+export function setFever(on) {
+  fever = on;
+}
+
 // --- Instruments -----------------------------------------------------------
 
 // A short envelope: quick attack, exponential decay to silence
@@ -187,6 +233,43 @@ function tone(bus, time, { type = 'sine', from, to = from, peak = 0.3, decay = 0
   osc.stop(time + decay + 0.02);
 }
 
+// A sung syllable: a buzzy sawtooth through three vowel formant filters, with a little vibrato.
+// Each note glides from an "l" into its vowel, so the lead sings "la la li".
+function voice(bus, time, { note, length, vowel = 'a', peak = 0.5 }) {
+  const osc = context.createOscillator();
+  osc.type = 'sawtooth';
+  osc.frequency.setValueAtTime(midiToHz(note), time);
+  // Vibrato fades in after the attack, like a held sung note
+  const lfo = context.createOscillator();
+  const lfoDepth = context.createGain();
+  lfo.frequency.value = 5.5;
+  lfoDepth.gain.setValueAtTime(0, time);
+  lfoDepth.gain.linearRampToValueAtTime(18, time + Math.min(0.15, length));
+  lfo.connect(lfoDepth).connect(osc.detune);
+
+  const out = context.createGain();
+  out.gain.setValueAtTime(0.0001, time);
+  out.gain.exponentialRampToValueAtTime(peak, time + 0.03);
+  out.gain.setValueAtTime(peak, time + length * 0.7);
+  out.gain.exponentialRampToValueAtTime(0.0001, time + length);
+
+  VOWELS[vowel].forEach((frequency, i) => {
+    const formant = context.createBiquadFilter();
+    formant.type = 'bandpass';
+    formant.Q.value = 7;
+    formant.frequency.setValueAtTime(L_FORMANTS[i], time);
+    formant.frequency.exponentialRampToValueAtTime(frequency, time + 0.05);
+    const level = context.createGain();
+    level.gain.value = [1, 0.6, 0.25][i];
+    osc.connect(formant).connect(level).connect(out);
+  });
+  out.connect(bus);
+  osc.start(time);
+  lfo.start(time);
+  osc.stop(time + length + 0.02);
+  lfo.stop(time + length + 0.02);
+}
+
 function noise(bus, time, { type = 'highpass', frequency, peak = 0.3, decay = 0.05, sweepTo = null }) {
   const source = context.createBufferSource();
   source.buffer = noiseBuffer;
@@ -213,6 +296,14 @@ function snare(bus, time) {
 
 function scheduleStep(step, time) {
   const inBar = step % STEPS_PER_BAR;
+  if (metronome) {
+    // Calibration click: a kick and a high tick on every beat, an accent on the bar
+    if (inBar % STEPS_PER_BEAT === 0) {
+      kick(musicBus, time);
+      tone(musicBus, time, { type: 'square', from: inBar === 0 ? 1760 : 1320, peak: 0.08, decay: 0.05, filter: 5000 });
+    }
+    return;
+  }
   const chord = CHORDS[Math.floor(step / STEPS_PER_BAR) % CHORDS.length];
   const onBeat = inBar % STEPS_PER_BEAT === 0;
 
@@ -233,9 +324,19 @@ function scheduleStep(step, time) {
     tone(musicBus, time, { type: 'square', from: midiToHz(note), peak: 0.035, decay: 0.1, filter: 4000 });
   }
 
-  if (intensity >= 3 && inBar % 2 === 0) {
-    const note = LEAD[(step / 2) % LEAD.length];
-    if (note) tone(musicBus, time, { type: 'triangle', from: midiToHz(note), peak: 0.16, decay: 0.28 });
+  // The sung lead; in fever it also sings an octave up
+  if ((intensity >= 3 || fever) && inBar % 2 === 0) {
+    const index = (step / 2) % LEAD.length;
+    const note = LEAD[index];
+    if (note) {
+      // Hold each note until the next one (or a rest), up to a beat
+      let eighths = 1;
+      while (eighths < 2 && !LEAD[(index + eighths) % LEAD.length]) eighths++;
+      const length = (60 / bpm / 2) * eighths * 0.95;
+      const vowel = index % 4 === 3 ? 'i' : 'a';
+      voice(musicBus, time, { note, length, vowel });
+      if (fever) voice(musicBus, time, { note: note + 12, length, vowel, peak: 0.25 });
+    }
   }
 }
 
@@ -255,16 +356,19 @@ function runScheduler() {
 
 /**
  * Start the music for a run at `newBpm`; beat 0 lands a moment after this call.
+ * With `asMetronome`, play only a click on every beat (for timing calibration).
  */
-export function startMusic(newBpm) {
+export function startMusic(newBpm, asMetronome = false) {
   if (!ensureAudio()) return;
   stopMusic();
   context.resume();
   bpm = newBpm;
   pendingBpm = null;
   intensity = 1;
+  fever = false;
+  metronome = asMetronome;
   musicBus = context.createGain();
-  musicBus.gain.value = MUSIC_VOLUME;
+  musicBus.gain.value = MUSIC_VOLUME * (asMetronome ? 1 : volumes.music);
   musicBus.connect(master);
   nextStepTime = context.currentTime + START_DELAY;
   nextStep = 0;

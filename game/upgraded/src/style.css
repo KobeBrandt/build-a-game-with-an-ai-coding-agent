@@ -708,6 +708,236 @@ kbd {
   margin-top: 6px;
 }
 
+/* Damage numbers float up from hit enemies; kills are bigger and red like the roofs */
+.damage-numbers {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  user-select: none;
+}
+
+.damage-number {
+  position: absolute;
+  top: 0;
+  left: 0;
+  color: var(--wall);
+  font-size: 1.125rem;
+  font-weight: 700;
+  -webkit-text-stroke: 2px var(--leaf-deep);
+  paint-order: stroke fill;
+}
+
+.damage-number.strong {
+  color: var(--roof);
+  font-size: 1.5rem;
+  -webkit-text-stroke-color: var(--wall);
+}
+
+/* "Drop!" banner when the lead comes in with a big wave */
+.drop-banner {
+  position: fixed;
+  top: 28%;
+  left: 50%;
+  color: var(--tongue);
+  font-size: clamp(3rem, 12vw, 5rem);
+  font-weight: 700;
+  -webkit-text-stroke: 4px var(--ink);
+  paint-order: stroke fill;
+  opacity: 0;
+  transform: translateX(-50%);
+  pointer-events: none;
+  user-select: none;
+}
+
+.drop-banner.show {
+  animation: drop-banner 1.4s ease-out;
+}
+
+@keyframes drop-banner {
+  0% {
+    opacity: 1;
+    transform: translateX(-50%) scale(1.6);
+  }
+  20%,
+  70% {
+    opacity: 1;
+    transform: translateX(-50%) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-20px);
+  }
+}
+
+/* Fever: a teal glow around the screen while the combo is 20 or more */
+.fever::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  box-shadow: inset 0 0 80px 20px rgba(57, 197, 187, 0.55);
+  pointer-events: none;
+  animation: fever-glow 0.8s ease-in-out infinite alternate;
+}
+
+@keyframes fever-glow {
+  from {
+    opacity: 0.6;
+  }
+}
+
+/* Sound and timing settings */
+.settings {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  max-width: 34em;
+  margin-bottom: 12px;
+}
+
+.settings label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  width: 320px;
+  max-width: 100%;
+  font-size: 1.125rem;
+  font-weight: 600;
+}
+
+.settings input[type='range'] {
+  flex: 1;
+  accent-color: var(--pick);
+}
+
+.settings input[type='range']:focus-visible {
+  outline: 3px solid var(--ink);
+  outline-offset: 3px;
+}
+
+.overlay .calibration-hint,
+.overlay .calibration-status {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.overlay .calibration-status {
+  font-weight: 600;
+}
+
+.settings-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.settings-buttons button:not(.primary) {
+  padding: 10px 14px;
+  border: 3px solid var(--leaf-deep);
+  border-radius: 6px;
+  background: var(--wall);
+  box-shadow: var(--block-side);
+  font-weight: 600;
+}
+
+.settings-buttons button:disabled {
+  background: var(--rock);
+  cursor: not-allowed;
+}
+
+.overlay .tap-button {
+  touch-action: manipulation;
+}
+
+/* Touch controls: a D-pad bottom left, attack bottom right, pause top right; white wall blocks */
+.touch-controls {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  user-select: none;
+}
+
+.touch-controls[hidden] {
+  display: none;
+}
+
+.touch-controls button {
+  position: absolute;
+  width: 60px;
+  height: 60px;
+  border: 3px solid var(--leaf-deep);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.85);
+  box-shadow: var(--block-side);
+  color: var(--ink);
+  font: 700 1.25rem var(--font);
+  pointer-events: auto;
+  touch-action: none;
+}
+
+.touch-controls button.pressed {
+  transform: translateY(4px);
+  box-shadow: 0 1px 0 var(--leaf-deep);
+  background: var(--grass-light);
+}
+
+.touch-controls button[hidden] {
+  display: none;
+}
+
+.touch-up {
+  bottom: 140px;
+  left: 82px;
+}
+
+.touch-left {
+  bottom: 76px;
+  left: 18px;
+}
+
+.touch-right {
+  bottom: 76px;
+  left: 146px;
+}
+
+.touch-down {
+  bottom: 12px;
+  left: 82px;
+}
+
+.touch-controls .touch-attack {
+  right: 18px;
+  bottom: 40px;
+  width: 92px;
+  height: 92px;
+  border-color: var(--roof-side);
+  border-radius: 50%;
+  background: var(--roof);
+  box-shadow: 0 5px 0 var(--roof-side);
+  color: var(--wall);
+  font-size: 1.125rem;
+}
+
+.touch-controls .touch-pause {
+  top: 70px;
+  right: 16px;
+  width: 48px;
+  height: 48px;
+}
+
+/* On touch screens the beat track and attack meter move up, clear of the controls */
+.touch .beat-hud {
+  bottom: 214px;
+}
+
+.touch .attack-meter {
+  bottom: 166px;
+}
+
 /* Players who ask their system for less motion get no pops, pulses, hops or full-screen flash */
 @media (prefers-reduced-motion: reduce) {
   *,
@@ -719,6 +949,10 @@ kbd {
 
   .shield-flash::after {
     display: none;
+  }
+
+  .fever::before {
+    opacity: 0.6;
   }
 
   /* Without the pop animation the judgement would never show, so just show it */

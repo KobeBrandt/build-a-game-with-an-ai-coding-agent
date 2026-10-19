@@ -3,6 +3,7 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { computeCollisionRadius, isTouching, wouldHitObstacle } from './Collision.js';
 import { enemies } from './Enemy.js';
 import { SFX } from './Audio.js';
+import { getBeatPulse, snapToBeatGrid } from './Rhythm.js';
 
 // Movement tuning
 const MOVE_DURATION = 0.25; // base seconds per jump (lower = faster)
@@ -12,6 +13,12 @@ const JUMP_DISTANCE = 40;
 const MAX_QUEUED_MOVES = 2;
 const MODEL_SCALE = 20;
 const STRETCH = 0.18; // how much Tode stretches mid-air (squash and stretch)
+const LAND_SQUASH = 0.22; // how flat Tode squashes on landing
+const LAND_DURATION = 0.12; // seconds the landing squash takes to spring back
+const BEAT_BOB = 0.06; // how much Tode bounces to the beat while standing still
+
+// No beat bounce or landing squash for players who ask their system for less motion
+const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
 
 const DIRECTIONS = {
   forward: { x: 0, y: 1, angle: Math.PI },
@@ -79,6 +86,7 @@ const moveQueue = [];
 
 const movement = {
   direction: null,
+  duration: MOVE_DURATION, // seconds this hop lasts, snapped to the beat (see Rhythm.js)
   progress: 0,
   completed: true,
   startAngle: 0,
@@ -99,7 +107,8 @@ const heldDirections = [];
 
 window.addEventListener('keydown', (event) => {
   const direction = KEY_TO_DIRECTION[event.code];
-  if (!direction) return;
+  // Arrow keys on a slider (the volume settings) move the slider, not Tode
+  if (!direction || event.target instanceof HTMLInputElement) return;
 
   event.preventDefault();
   // Auto-repeat events are ignored; holding a key is handled via heldDirections
@@ -136,6 +145,7 @@ function startNextMove() {
   movement.progress = 0;
   movement.completed = false;
   movement.startAngle = model ? model.rotation.y : 0;
+  movement.duration = snapToBeatGrid(1 / moveSpeed);
   SFX.hop();
 }
 
@@ -144,13 +154,26 @@ function angleDelta(from, to) {
   return Math.atan2(Math.sin(to - from), Math.cos(to - from));
 }
 
+let landTimer = 0;
+
+// Standing still: a squash after landing, and a little bounce on every beat
+function updateIdlePose(delta) {
+  if (!model) return;
+  landTimer = Math.max(0, landTimer - delta);
+  const squash = reducedMotion.matches ? 0 : LAND_SQUASH * (landTimer / LAND_DURATION) + BEAT_BOB * getBeatPulse();
+  model.scale.set(MODEL_SCALE * (1 + squash / 2), MODEL_SCALE * (1 - squash), MODEL_SCALE * (1 + squash / 2));
+}
+
 // Returns true if the player hopped into an enemy (game over)
 export function updatePlayer(delta) {
   startNextMove();
-  if (movement.completed) return false;
+  if (movement.completed) {
+    updateIdlePose(delta);
+    return false;
+  }
 
   const previousProgress = movement.progress;
-  movement.progress = Math.min(1, movement.progress + delta * moveSpeed);
+  movement.progress = Math.min(1, movement.progress + delta / movement.duration);
   const { progress } = movement;
   const direction = DIRECTIONS[movement.direction];
 
@@ -184,10 +207,9 @@ export function updatePlayer(delta) {
 
   if (progress >= 1) {
     movement.completed = true;
-    if (model) {
-      model.position.z = groundOffset;
-      model.scale.setScalar(MODEL_SCALE);
-    }
+    landTimer = LAND_DURATION;
+    if (model) model.position.z = groundOffset;
+    updateIdlePose(0);
   }
   return false;
 }
@@ -203,6 +225,7 @@ export function resetPlayer() {
   movement.direction = null;
   movement.progress = 0;
   movement.completed = true;
+  landTimer = 0;
   facing = 'backward';
   if (model) {
     model.position.z = groundOffset;
