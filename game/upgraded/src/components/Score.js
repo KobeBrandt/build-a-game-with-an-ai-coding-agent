@@ -1,4 +1,5 @@
-import { getMode } from './Modes.js';
+import { getMode, MODES } from './Modes.js';
+import { ATTACKS, getAttack } from './Attack.js';
 
 // Scoring tuning
 const SCORE_PER_SECOND = 0.1; // 1 point every 10 seconds survived
@@ -15,13 +16,27 @@ document.body.appendChild(scoreElement);
 const valueElement = scoreElement.querySelector('.score-value');
 const bestElement = scoreElement.querySelector('.score-best');
 
-// Best score per game mode, kept between visits when the browser allows it
+// Best score per game mode and attack ("Classic/spit"), kept between visits when the browser allows it.
+// Each attack plays at its own tempo, so scores are only compared within the same attack.
+const scoreKey = () => `${getMode().name}/${getAttack().id}`;
+
 function loadHighScores() {
+  let scores;
   try {
-    return JSON.parse(localStorage.getItem(HIGH_SCORE_KEY)) ?? {};
+    scores = JSON.parse(localStorage.getItem(HIGH_SCORE_KEY)) ?? {};
   } catch {
     return {};
   }
+  // Older versions kept one best per mode ("Classic"): carry it over to every attack of that mode
+  for (const mode of MODES) {
+    if (scores[mode.name] === undefined) continue;
+    for (const attack of ATTACKS) {
+      const key = `${mode.name}/${attack.id}`;
+      scores[key] = Math.max(scores[key] ?? 0, scores[mode.name]);
+    }
+    delete scores[mode.name];
+  }
+  return scores;
 }
 
 const highScores = loadHighScores();
@@ -35,7 +50,7 @@ function saveHighScores() {
 }
 
 export function getHighScore() {
-  return highScores[getMode().name] ?? 0;
+  return highScores[scoreKey()] ?? 0;
 }
 
 // Survival time is advanced by the game loop, so pausing simply stops the count
@@ -52,7 +67,7 @@ export function stopScore() {
   const score = getScore();
   if (score <= getHighScore()) return false;
 
-  highScores[getMode().name] = score;
+  highScores[scoreKey()] = score;
   saveHighScores();
   updateScore(0);
   return true;
