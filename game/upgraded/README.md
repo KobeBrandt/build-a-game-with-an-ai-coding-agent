@@ -60,6 +60,7 @@ Actions tab). To turn it on once, set **Settings > Pages > Source** to **GitHub 
 | Controls | WASD as well as the arrow keys; `A`/`D` change the mode in the menu | `components/Player.js`, `src/main.js` |
 | UI | Menus and HUD in the game world's style: checkerboard grass panel, white wall blocks with dark green sides, red roof buttons and a light sky haze over the world. See [Game-world UI](#game-world-ui) | `index.html`, `src/main.js`, `src/style.css` |
 | Accessibility | WCAG 2.2 and Game Accessibility Guidelines pass over the menus and HUD. See [Accessibility](#accessibility) | `index.html`, `src/main.js`, `src/style.css` |
+| Rhythm | Synthesised music and sound effects, and a beat system: hops and attacks on the beat build a combo that multiplies kill points, and on-beat attacks hit harder. See [Rhythm and sound](#rhythm-and-sound) | `components/Audio.js`, `components/Rhythm.js`, `components/Attack.js`, `src/main.js`, `src/style.css` |
 | Deploy | Static GitHub Pages build that works under any repository path. See [Deploy to GitHub Pages](#deploy-to-github-pages) | `vite.config.js`, `../package.json`, `../../.github/workflows/deploy-upgraded.yml`, `components/Enemy.js`, `components/House.js`, `components/Player.js`, `src/main.js` |
 
 ## Attacks
@@ -155,6 +156,28 @@ If every upgrade is maxed, a **Continue** button appears instead.
 
 In-game upgrades multiply: for example two Swift Hops picks give `1.1 × 1.1` = +21% hop speed.
 
+## Rhythm and sound
+
+Every run plays a synthesised synth-pop loop (Am, F, C, G) made with the Web Audio API, so there are no sound files.
+Each mode has its own tempo: Classic 120 BPM, Horde 136 BPM, Hunter 104 BPM. More layers join the music as the
+level rises: drums and bass at level 1, snare and arpeggio from level 2, a lead melody from level 4.
+The beat clock is the audio clock itself, so what you see and what you hear stay in time, and pausing freezes both.
+
+| Element | What it does |
+| --- | --- |
+| Beat track | Bottom of the screen, above the attack meter: markers slide in from both sides and meet in the target on every beat |
+| Beat ring | A teal ring under Tode pulses on every beat; enemies bob to the beat (not with reduced motion) |
+| Judgement | Each hop key press and each Shockwave or Spit is judged against the nearest beat: **Perfect** (within 50 ms), **Great** (within 110 ms) or **Off beat** |
+| Combo | Perfect and Great add 1 (once per beat, so pressing every key on one beat doesn't pad it). Off beat resets it. It also fades after 8 beats of play without an on-beat press |
+| Combo bonus | Kill points × (1 + 0.05 per combo), up to ×3 at combo 40 |
+| On-beat damage | A Perfect attack deals ×1.5 damage, a Great one ×1.25. A Shockwave on the beat turns teal |
+| Tongue | Lashes on the music's 16th notes (base cooldown 0.5 s, was 0.55 s, to keep the same damage per second) |
+| Sound effects | Hop, each attack, hit, kill, shield, level up, game over and judgement chimes; the chimes and kill blips use the notes of the current chord |
+| Game over | Shows the best combo and number of Perfects |
+
+The rhythm is optional: playing off the beat only loses the combo bonus.
+Press `M` on any screen to turn the sound off or on (saved in `localStorage` key `tode-muted`).
+
 ## Game-world UI
 
 The menus and HUD use the colours and shapes of the game world itself, so they look like part of it.
@@ -209,4 +232,5 @@ Not done yet: adjustable game speed, key remapping and on-screen touch controls.
 - `U`: open the upgrade shop from the start and game over screens (`W`/`S` choose, `Space` or `Enter` buy, `U`/`Esc` back)
 - Level up: `1` / `2` / `3`, or `A`/`D` and `Space`, or click a card
 - `P` or `Esc`: pause and resume
+- `M`: sound on/off
 - `Tab` / `Shift+Tab`: move between buttons on any menu screen; `Enter` or `Space` presses the focused button

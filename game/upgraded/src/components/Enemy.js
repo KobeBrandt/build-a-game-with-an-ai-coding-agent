@@ -11,6 +11,7 @@ import {
 } from './Collision.js';
 import { TILE_SIZE } from './Map.js';
 import { getMode } from './Modes.js';
+import { SFX } from './Audio.js';
 
 // Enemy tuning (speed, spawn delay and enemy cap come from the selected game mode)
 const SPAWN_DISTANCE = TILE_SIZE * 8; // spawn points sit this far from the player on each axis
@@ -209,11 +210,13 @@ export function damageEnemy(scene, enemy, amount, fromX, fromY) {
   const { userData } = enemy;
   userData.health -= amount;
   if (userData.health <= 0) {
+    SFX.kill();
     userData.healthBar.visible = false;
     defeatEnemy(scene, enemy);
     return true;
   }
 
+  SFX.hit();
   userData.hitTimer = HIT_FLASH_DURATION;
   userData.healthBar.visible = true;
   const share = userData.health / userData.maxHealth;

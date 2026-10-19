@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { computeCollisionRadius, isTouching, wouldHitObstacle } from './Collision.js';
 import { enemies } from './Enemy.js';
+import { SFX } from './Audio.js';
 
 // Movement tuning
 const MOVE_DURATION = 0.25; // base seconds per jump (lower = faster)
@@ -30,6 +31,9 @@ const KEY_TO_DIRECTION = {
   KeyA: 'left',
   KeyD: 'right',
 };
+
+// True for the keys that make Tode hop (main.js judges those presses against the beat)
+export const isMoveKey = (code) => code in KEY_TO_DIRECTION;
 
 export const player = new THREE.Group();
 player.position.set(0, 0, 0);
@@ -132,6 +136,7 @@ function startNextMove() {
   movement.progress = 0;
   movement.completed = false;
   movement.startAngle = model ? model.rotation.y : 0;
+  SFX.hop();
 }
 
 // Shortest signed angle from `from` to `to`

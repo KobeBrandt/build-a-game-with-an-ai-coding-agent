@@ -65,9 +65,10 @@ export function resetScore() {
   updateScore(0);
 }
 
-export function addKills(count) {
+// `multiplier` is the rhythm combo bonus (see Rhythm.js)
+export function addKills(count, multiplier = 1) {
   kills += count;
-  killScore += count * SCORE_PER_KILL;
+  killScore += count * SCORE_PER_KILL * multiplier;
   if (count > 0) {
     // Restart the CSS pop animation on every kill
     scoreElement.classList.remove('score-pop');

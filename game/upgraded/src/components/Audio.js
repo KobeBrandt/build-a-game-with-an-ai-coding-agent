@@ -1,0 +1,313 @@
+// Music and sound effects, all synthesised with the Web Audio API (no sound files to load).
+// The music is a 4-bar loop on the classic vi-IV-I-V progression (Am, F, C, G). It is the beat
+// clock for the rhythm system in Rhythm.js: every beat time comes from the audio clock, so the
+// beat the player sees and the beat they hear never drift apart.
+
+const MUTE_KEY = 'tode-muted';
+const MASTER_VOLUME = 0.5;
+const MUSIC_VOLUME = 0.55;
+const SFX_VOLUME = 0.8;
+const LOOKAHEAD = 0.12; // seconds of music scheduled ahead of the audio clock
+const SCHEDULE_INTERVAL = 25; // ms between scheduler runs
+const START_DELAY = 0.15; // seconds between starting a run and the first beat
+const STEPS_PER_BEAT = 4; // the sequencer runs on 16th notes
+const STEPS_PER_BAR = 16;
+
+// One chord per bar: root note (MIDI) for the bass and chord tones for the arpeggio
+const CHORDS = [
+  { root: 45, tones: [69, 72, 76, 81] }, // Am
+  { root: 41, tones: [65, 69, 72, 77] }, // F
+  { root: 48, tones: [67, 72, 76, 79] }, // C
+  { root: 43, tones: [67, 71, 74, 79] }, // G
+];
+// Which chord tone the arpeggio plays on each 16th step of a bar (-1 = rest)
+const ARP_PATTERN = [0, 2, 1, 3, 2, 1, 3, 2, 0, 2, 1, 3, 2, 3, 1, -1];
+// Lead melody, one note (MIDI) per 8th note of the 4-bar loop (0 = rest), only at high levels
+const LEAD = [
+  76, 0, 79, 81, 79, 76, 74, 0, 72, 0, 74, 76, 0, 72, 69, 0,
+  72, 0, 76, 79, 76, 72, 0, 74, 79, 0, 76, 74, 72, 74, 76, 0,
+];
+
+const midiToHz = (note) => 440 * 2 ** ((note - 69) / 12);
+
+function loadMuted() {
+  try {
+    return localStorage.getItem(MUTE_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+let muted = loadMuted();
+let context = null;
+let master = null;
+let sfxBus = null;
+let noiseBuffer = null;
+
+// Music state for the current run
+let musicBus = null;
+let bpm = 120;
+let songStart = 0; // audio time of beat 0
+let nextStep = 0; // next 16th step to schedule
+let schedulerId = null;
+let intensity = 1; // 1 = drums and bass, 2 = + snare and arpeggio, 3 = + lead
+
+/**
+ * Create the audio context. Browsers only allow this after a click or key press,
+ * so it is called when a run starts. Returns false when Web Audio isn't available.
+ */
+export function ensureAudio() {
+  if (context) return true;
+  const AudioContextClass = window.AudioContext ?? window.webkitAudioContext;
+  if (!AudioContextClass) return false;
+
+  context = new AudioContextClass({ latencyHint: 'interactive' });
+  master = context.createGain();
+  master.gain.value = muted ? 0 : MASTER_VOLUME;
+  // A gentle compressor keeps stacked hits from clipping
+  const limiter = context.createDynamicsCompressor();
+  limiter.threshold.value = -10;
+  limiter.ratio.value = 6;
+  master.connect(limiter).connect(context.destination);
+
+  sfxBus = context.createGain();
+  sfxBus.gain.value = SFX_VOLUME;
+  sfxBus.connect(master);
+
+  // One second of white noise, shared by the drums and the shockwave
+  noiseBuffer = context.createBuffer(1, context.sampleRate, context.sampleRate);
+  const data = noiseBuffer.getChannelData(0);
+  for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+  return true;
+}
+
+export function isMuted() {
+  return muted;
+}
+
+export function toggleMute() {
+  muted = !muted;
+  try {
+    localStorage.setItem(MUTE_KEY, muted ? '1' : '0');
+  } catch {
+    // Storage blocked: the setting just lasts for this visit
+  }
+  if (master) master.gain.setTargetAtTime(muted ? 0 : MASTER_VOLUME, context.currentTime, 0.02);
+  return muted;
+}
+
+/**
+ * Audio time the speakers are playing right now, or null without audio.
+ * Pass an event's `timeStamp` to get the audio time the player heard when the event happened.
+ */
+export function audibleTime(performanceTime = performance.now()) {
+  if (!context || context.state !== 'running') return null;
+  if (context.getOutputTimestamp) {
+    const stamp = context.getOutputTimestamp();
+    if (stamp.performanceTime > 0) {
+      return stamp.contextTime + (performanceTime - stamp.performanceTime) / 1000;
+    }
+  }
+  return context.currentTime - (context.outputLatency || context.baseLatency || 0);
+}
+
+// Beat clock for Rhythm.js
+export const isMusicPlaying = () => musicBus !== null && context.state === 'running';
+export const getSongStart = () => songStart;
+export const getSecondsPerBeat = () => 60 / bpm;
+
+export function setMusicIntensity(level) {
+  intensity = level;
+}
+
+// --- Instruments -----------------------------------------------------------
+
+// A short envelope: quick attack, exponential decay to silence
+function envelope(gainNode, time, peak, decay) {
+  gainNode.gain.setValueAtTime(0.0001, time);
+  gainNode.gain.exponentialRampToValueAtTime(peak, time + 0.005);
+  gainNode.gain.exponentialRampToValueAtTime(0.0001, time + decay);
+}
+
+function tone(bus, time, { type = 'sine', from, to = from, peak = 0.3, decay = 0.15, filter = null }) {
+  const osc = context.createOscillator();
+  const gain = context.createGain();
+  osc.type = type;
+  osc.frequency.setValueAtTime(from, time);
+  if (to !== from) osc.frequency.exponentialRampToValueAtTime(to, time + decay);
+  envelope(gain, time, peak, decay);
+  let node = osc;
+  if (filter) {
+    const lowpass = context.createBiquadFilter();
+    lowpass.type = 'lowpass';
+    lowpass.frequency.value = filter;
+    node = node.connect(lowpass);
+  }
+  node.connect(gain).connect(bus);
+  osc.start(time);
+  osc.stop(time + decay + 0.02);
+}
+
+function noise(bus, time, { type = 'highpass', frequency, peak = 0.3, decay = 0.05, sweepTo = null }) {
+  const source = context.createBufferSource();
+  source.buffer = noiseBuffer;
+  const filter = context.createBiquadFilter();
+  filter.type = type;
+  filter.frequency.setValueAtTime(frequency, time);
+  if (sweepTo) filter.frequency.exponentialRampToValueAtTime(sweepTo, time + decay);
+  const gain = context.createGain();
+  envelope(gain, time, peak, decay);
+  source.connect(filter).connect(gain).connect(bus);
+  source.start(time, Math.random() * 0.5);
+  source.stop(time + decay + 0.02);
+}
+
+const kick = (bus, time) => tone(bus, time, { from: 160, to: 40, peak: 0.9, decay: 0.22 });
+const hat = (bus, time, open) => noise(bus, time, { frequency: 7000, peak: open ? 0.12 : 0.08, decay: open ? 0.12 : 0.04 });
+
+function snare(bus, time) {
+  noise(bus, time, { frequency: 1500, peak: 0.35, decay: 0.14 });
+  tone(bus, time, { type: 'triangle', from: 220, to: 160, peak: 0.25, decay: 0.08 });
+}
+
+// --- Music sequencer -------------------------------------------------------
+
+function scheduleStep(step, time) {
+  const inBar = step % STEPS_PER_BAR;
+  const chord = CHORDS[Math.floor(step / STEPS_PER_BAR) % CHORDS.length];
+  const onBeat = inBar % STEPS_PER_BEAT === 0;
+
+  if (onBeat) kick(musicBus, time);
+  if (inBar % STEPS_PER_BEAT === 2) hat(musicBus, time, inBar === 14);
+  if (intensity >= 2 && (inBar === 4 || inBar === 12)) snare(musicBus, time);
+  if (intensity >= 2 && inBar % 2 === 1) hat(musicBus, time, false);
+
+  // Bass bounces root / octave on 8th notes
+  if (inBar % 2 === 0) {
+    const note = chord.root + (inBar % 4 === 2 ? 12 : 0);
+    tone(musicBus, time, { type: 'sawtooth', from: midiToHz(note), peak: 0.22, decay: 0.2, filter: 700 });
+  }
+
+  // Twinkly square-wave arpeggio, the "synth pop" layer
+  if (intensity >= 2 && ARP_PATTERN[inBar] >= 0) {
+    const note = chord.tones[ARP_PATTERN[inBar]] + 12;
+    tone(musicBus, time, { type: 'square', from: midiToHz(note), peak: 0.035, decay: 0.1, filter: 4000 });
+  }
+
+  if (intensity >= 3 && inBar % 2 === 0) {
+    const note = LEAD[(step / 2) % LEAD.length];
+    if (note) tone(musicBus, time, { type: 'triangle', from: midiToHz(note), peak: 0.16, decay: 0.28 });
+  }
+}
+
+function runScheduler() {
+  const stepLength = 60 / bpm / STEPS_PER_BEAT;
+  while (songStart + nextStep * stepLength < context.currentTime + LOOKAHEAD) {
+    scheduleStep(nextStep, songStart + nextStep * stepLength);
+    nextStep++;
+  }
+}
+
+/**
+ * Start the music for a run at `newBpm`; beat 0 lands a moment after this call.
+ */
+export function startMusic(newBpm) {
+  if (!ensureAudio()) return;
+  stopMusic();
+  context.resume();
+  bpm = newBpm;
+  intensity = 1;
+  musicBus = context.createGain();
+  musicBus.gain.value = MUSIC_VOLUME;
+  musicBus.connect(master);
+  songStart = context.currentTime + START_DELAY;
+  nextStep = 0;
+  schedulerId = setInterval(runScheduler, SCHEDULE_INTERVAL);
+  runScheduler();
+}
+
+export function stopMusic() {
+  if (schedulerId !== null) clearInterval(schedulerId);
+  schedulerId = null;
+  if (musicBus) {
+    // Fade out instead of clicking off; notes already scheduled die with the bus
+    const bus = musicBus;
+    bus.gain.setTargetAtTime(0, context.currentTime, 0.05);
+    setTimeout(() => bus.disconnect(), 400);
+  }
+  musicBus = null;
+}
+
+// Pausing freezes the audio clock, so the beat picks up exactly where it stopped
+export function pauseAudio() {
+  if (context && context.state === 'running') context.suspend();
+}
+
+export function resumeAudio() {
+  if (context && context.state === 'suspended') context.resume();
+}
+
+// --- Sound effects -----------------------------------------------------------
+
+const SFX_MIN_GAP = 0.04; // seconds; a shockwave that hits ten enemies plays one hit, not ten
+const lastPlayed = {};
+
+function play(callback, name = null) {
+  if (!context || context.state !== 'running') return;
+  const now = context.currentTime;
+  if (name) {
+    if (now - (lastPlayed[name] ?? -1) < SFX_MIN_GAP) return;
+    lastPlayed[name] = now;
+  }
+  callback(now);
+}
+
+// Pitch of chord tone `index` in the current bar, so SFX stay in key with the music
+function chordTone(index, octave = 1) {
+  const now = audibleTime() ?? 0;
+  const bar = Math.max(0, Math.floor((now - songStart) / ((60 / bpm) * 4)));
+  const { tones } = CHORDS[bar % CHORDS.length];
+  return midiToHz(tones[index % tones.length] + 12 * octave);
+}
+
+export const SFX = {
+  hop: () => play((t) => tone(sfxBus, t, { from: 420, to: 680, peak: 0.08, decay: 0.07 })),
+  shockwave: () =>
+    play((t) => {
+      noise(sfxBus, t, { type: 'lowpass', frequency: 2500, sweepTo: 200, peak: 0.5, decay: 0.3 });
+      tone(sfxBus, t, { from: 220, to: 55, peak: 0.5, decay: 0.25 });
+    }),
+  tongue: () => play((t) => tone(sfxBus, t, { type: 'triangle', from: 1100, to: 300, peak: 0.18, decay: 0.08 })),
+  spit: () => play((t) => tone(sfxBus, t, { type: 'square', from: 340, to: 140, peak: 0.1, decay: 0.09, filter: 1800 })),
+  hit: () => play((t) => tone(sfxBus, t, { type: 'triangle', from: 260, to: 180, peak: 0.18, decay: 0.06 }), 'hit'),
+  kill: () =>
+    play((t) => {
+      tone(sfxBus, t, { type: 'square', from: chordTone(0), peak: 0.07, decay: 0.08, filter: 3000 });
+      tone(sfxBus, t + 0.06, { type: 'square', from: chordTone(2), peak: 0.07, decay: 0.12, filter: 3000 });
+    }, 'kill'),
+  // Rhythm judgements: a bright chime on the chord, so on-beat play adds to the music
+  perfect: () =>
+    play((t) => {
+      tone(sfxBus, t, { from: chordTone(1, 2), peak: 0.12, decay: 0.3 });
+      tone(sfxBus, t, { from: chordTone(3, 2), peak: 0.08, decay: 0.3 });
+    }),
+  great: () => play((t) => tone(sfxBus, t, { from: chordTone(1, 2), peak: 0.08, decay: 0.2 })),
+  comboBreak: () => play((t) => tone(sfxBus, t, { type: 'sawtooth', from: 200, to: 120, peak: 0.08, decay: 0.15, filter: 900 })),
+  shield: () =>
+    play((t) => {
+      noise(sfxBus, t, { type: 'bandpass', frequency: 900, sweepTo: 3000, peak: 0.4, decay: 0.4 });
+      [0, 1, 2].forEach((i) => tone(sfxBus, t + i * 0.05, { type: 'triangle', from: chordTone(i, 1), peak: 0.15, decay: 0.4 }));
+    }),
+  levelUp: () =>
+    play((t) => {
+      [72, 76, 79, 84].forEach((note, i) =>
+        tone(sfxBus, t + i * 0.07, { type: 'square', from: midiToHz(note), peak: 0.08, decay: 0.2, filter: 3500 })
+      );
+    }),
+  gameOver: () =>
+    play((t) => {
+      [64, 60, 57, 52].forEach((note, i) =>
+        tone(sfxBus, t + i * 0.16, { type: 'triangle', from: midiToHz(note), peak: 0.22, decay: 0.35 })
+      );
+    }),
+};
