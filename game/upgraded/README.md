@@ -39,6 +39,7 @@ This starts the normal Vite dev server and opens `/upgraded/`. The upgraded game
 | Roguelite | XP from kills and survival; every level up pauses the run to pick 1 of 3 random in-game upgrades that last until game over. See [In-game upgrades](#in-game-upgrades-level-up) | `components/RunUpgrades.js`, `src/main.js` |
 | Roguelite | Shields absorb a hit and knock out nearby enemies; XP bar and shield count in the top-left corner | `src/main.js`, `src/style.css` |
 | Controls | WASD as well as the arrow keys; `A`/`D` change the mode in the menu | `components/Player.js`, `src/main.js` |
+| UI | Frog-style menus and HUD: Tode's greens, a dark pond backdrop with ripples, lily-pad buttons that sink when pressed, a hopping Tode above the title and a rounded font. See [Frog-style UI](#frog-style-ui) | `index.html`, `src/main.js`, `src/style.css` |
 | Accessibility | WCAG 2.2 and Game Accessibility Guidelines pass over the menus and HUD. See [Accessibility](#accessibility) | `index.html`, `src/main.js`, `src/style.css` |
 
 ## Attacks
@@ -135,6 +136,26 @@ If every upgrade is maxed, a **Continue** button appears instead.
 | Golden Touch | +25% coins this run | 3 |
 
 In-game upgrades multiply: for example two Swift Hops picks give `1.1 × 1.1` = +21% hop speed.
+
+## Frog-style UI
+
+The menus and HUD now match Tode instead of plain black boxes. All colours are CSS variables at the top of `src/style.css`.
+
+| Colour | Value | Used for |
+| --- | --- | --- |
+| Frog | `#21d789` (Tode's body in `public/tode.svg`) | Title, Start/Play again/Resume button, ready attack meter, upgrade pips |
+| Frog dark | `#13bc6f` (Tode's feet) | HUD panel borders, selected mode and attack |
+| Pond / pond deep | `#0b3d2c` / `#062419` | Panel and overlay background, outlines and drop shadows |
+| Lily pad | `#1a6b47` / `#2a8a5e` | Menu buttons and cards, hover and selected cards |
+| Fly gold | `#ffd84a` | Coins, costs, the selection border, the ready attack meter border |
+| Tongue pink | `#ff7a9c` | XP bar fill |
+
+- **Font:** [Fredoka](https://fonts.google.com/specimen/Fredoka) from Google Fonts (`index.html`), a rounded, chunky font. Without a connection it falls back to Trebuchet MS, then the system font.
+- **HUD:** score, level, XP and the attack meter sit on dark pond panels with a green border and a chunky drop shadow, like the flat blocks Tode is built from.
+- **Menus:** the overlay is a dark pond with faint ripple rings. Modes, attacks, shop items and level-up cards are lily-pad buttons with a dark outline and a bottom shadow; they sink 3px when pressed. Level-up cards are extra round.
+- **Title:** a big green title with a dark outline and shadow. Tode (`public/tode.svg`) hops above it on the start screen, and lies belly-up on the game over screen.
+- **Keys:** `<kbd>` keys look like cream keycaps with a thick bottom edge.
+- **Accessibility kept:** the white focus ring, the ✓ on the selected mode and attack, and "(need N more)" on prices are unchanged. Tode's picture has an empty `alt` because it is decoration. The ready attack meter switches to a dark label so the text stays readable on the bright green. With reduced motion on, Tode doesn't hop and buttons don't animate.
 
 ## Accessibility
 

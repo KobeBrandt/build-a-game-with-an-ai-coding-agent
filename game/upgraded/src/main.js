@@ -234,6 +234,9 @@ let levelUpIndex = 0;
 // Difficulty level last read out to screen readers
 let announcedLevel = 1;
 
+// Tode above the start and game over titles (decorative, so screen readers skip it)
+const TITLE_TODE_HTML = '<img class="title-tode" src="/tode.svg" alt="" width="96" height="88">';
+
 const UPGRADES_BUTTON_HTML =
   '<button type="button" class="link" data-shop>Upgrades <kbd>U</kbd></button>';
 
@@ -247,6 +250,7 @@ function renderOverlay() {
 
   if (state === 'start') {
     overlay.innerHTML = `
+      ${TITLE_TODE_HTML}
       <h1 id="overlay-title">Tode's Escape</h1>
       <p>Choose a mode with <kbd>A</kbd>/<kbd>D</kbd>, then press <kbd>Space</kbd> to start</p>
       ${modeListHtml()}
@@ -277,6 +281,7 @@ function renderOverlay() {
       <p class="controls">Press <kbd>P</kbd> or <kbd>Esc</kbd> to continue</p>`;
   } else if (state === 'gameover') {
     overlay.innerHTML = `
+      ${TITLE_TODE_HTML}
       <h1 id="overlay-title">Game Over</h1>
       <p class="final">Score: ${lastRun.score}</p>
       ${lastRun.newHighScore ? '<p class="new-best">New high score!</p>' : `<p class="best">Best in ${getMode().name}: ${getHighScore()}</p>`}
