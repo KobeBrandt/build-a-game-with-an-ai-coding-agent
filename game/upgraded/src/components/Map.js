@@ -98,6 +98,7 @@ function loadChunk(map, cx, cy) {
   const ground = new THREE.Mesh(chunkGeometry, chunkMaterial);
   ground.position.set((bounds.minX + bounds.maxX) / 2, (bounds.minY + bounds.maxY) / 2, 0);
   ground.receiveShadow = true;
+  ground.userData.ground = true;
   group.add(ground);
 
   const chunk = { group, footprints: [], loaded: true };
@@ -149,6 +150,75 @@ export function updateMap(map, position) {
   for (let cx = centerX - LOAD_RADIUS; cx <= centerX + LOAD_RADIUS; cx++) {
     for (let cy = centerY - LOAD_RADIUS; cy <= centerY + LOAD_RADIUS; cy++) {
       if (!chunks.has(`${cx},${cy}`)) loadChunk(map, cx, cy);
+    }
+  }
+}
+
+// --- See-through obstacles ---------------------------------------------------------
+// Houses, trees and rocks standing between the camera and the area around Tode turn see-through,
+// so they never hide Tode or an enemy closing in.
+
+const FADE_OPACITY = 0.3;
+const FADE_BEHIND = 30; // world units behind Tode (away from the camera) that still count
+const FADE_AHEAD = 170; // world units in front of Tode (toward the camera) that count
+const FADE_WIDTH = 70; // world units to each side of the line from Tode to the camera
+
+// See-through copy of each shared material, made the first time it is needed
+const fadedMaterials = new Map();
+
+function fadedMaterial(material) {
+  if (!fadedMaterials.has(material)) {
+    const faded = material.clone();
+    faded.transparent = true;
+    faded.opacity = FADE_OPACITY;
+    faded.depthWrite = false;
+    fadedMaterials.set(material, faded);
+  }
+  return fadedMaterials.get(material);
+}
+
+function setFaded(object, faded) {
+  if (object.userData.faded === faded) return;
+  object.userData.faded = faded;
+  object.traverse((child) => {
+    if (!child.isMesh) return;
+    if (!child.userData.solidMaterial) child.userData.solidMaterial = child.material;
+    const solid = child.userData.solidMaterial;
+    child.material = faded ? (Array.isArray(solid) ? solid.map(fadedMaterial) : fadedMaterial(solid)) : solid;
+  });
+}
+
+const toCamera = new THREE.Vector2();
+const sideways = new THREE.Vector2();
+const toObject = new THREE.Vector2();
+const objectBox = new THREE.Box3();
+const objectSize = new THREE.Vector3();
+
+/**
+ * Fade the obstacles between the camera and Tode. `cameraOffset` is the camera's position
+ * relative to Tode.
+ */
+export function updateOccluders(position, cameraOffset) {
+  toCamera.set(cameraOffset.x, cameraOffset.y).normalize();
+  sideways.set(-toCamera.y, toCamera.x);
+  for (const { group } of chunks.values()) {
+    for (const object of group.children) {
+      if (object.userData.ground) continue;
+      // The object's centre and half its width on the ground, measured once (obstacles never move)
+      if (!object.userData.fadeCenter) {
+        objectBox.setFromObject(object);
+        objectBox.getSize(objectSize);
+        object.userData.fadeCenter = objectBox.getCenter(new THREE.Vector3());
+        object.userData.halfWidth = Math.max(objectSize.x, objectSize.y) / 2;
+      }
+      const { fadeCenter, halfWidth } = object.userData;
+      toObject.set(fadeCenter.x - position.x, fadeCenter.y - position.y);
+      const ahead = toObject.dot(toCamera);
+      const side = Math.abs(toObject.dot(sideways));
+      setFaded(
+        object,
+        ahead > -FADE_BEHIND - halfWidth && ahead < FADE_AHEAD + halfWidth && side < FADE_WIDTH + halfWidth
+      );
     }
   }
 }
