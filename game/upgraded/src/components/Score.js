@@ -41,6 +41,7 @@ export function getHighScore() {
 // Survival time is advanced by the game loop, so pausing simply stops the count
 let survivalTime = 0;
 let killScore = 0;
+let kills = 0;
 let displayedScore = null;
 let displayedBest = null;
 
@@ -59,11 +60,13 @@ export function stopScore() {
 
 export function resetScore() {
   killScore = 0;
+  kills = 0;
   survivalTime = 0;
   updateScore(0);
 }
 
 export function addKills(count) {
+  kills += count;
   killScore += count * SCORE_PER_KILL;
   if (count > 0) {
     // Restart the CSS pop animation on every kill
@@ -71,6 +74,13 @@ export function addKills(count) {
     void scoreElement.offsetWidth;
     scoreElement.classList.add('score-pop');
   }
+}
+
+/**
+ * Enemies defeated and seconds survived this run.
+ */
+export function getRunStats() {
+  return { kills, time: survivalTime };
 }
 
 export function getScore() {

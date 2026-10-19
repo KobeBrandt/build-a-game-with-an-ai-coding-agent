@@ -1,11 +1,12 @@
 import * as THREE from 'three';
 import './style.css';
-import { clearQueuedMoves, player, resetPlayer, setPlayerSpeed, updatePlayer } from './components/Player.js';
+import { clearQueuedMoves, player, playerReady, resetPlayer, setPlayerSpeed, updatePlayer } from './components/Player.js';
 import { Camera } from './components/Camera.js';
 import { Renderer } from './components/Renderer.js';
 import {
   defeatEnemy,
   enemies,
+  enemyReady,
   resetEnemies,
   setEnemyDifficulty,
   updateDefeatedEnemies,
@@ -22,10 +23,11 @@ import {
   setAttackDifficulty,
   updateAttack,
 } from './components/Attack.js';
-import { addKills, getHighScore, getScore, resetScore, stopScore, updateScore } from './components/Score.js';
+import { addKills, getHighScore, getRunStats, getScore, resetScore, stopScore, updateScore } from './components/Score.js';
 import { getDifficulty, getLevel } from './components/Difficulty.js';
 import { isTouching } from './components/Collision.js';
 import { GameMap, updateMap } from './components/Map.js';
+import { houseTemplateReady } from './components/House.js';
 import { cycleMode, getMode, MODES, setModeByKey } from './components/Modes.js';
 import {
   addCoins,
@@ -221,7 +223,7 @@ function levelUpHtml() {
 
 // 'start' | 'shop' | 'playing' | 'paused' | 'levelup' | 'gameover'
 let state = 'start';
-let lastRun = { score: 0, newHighScore: false, coins: 0 };
+let lastRun = { score: 0, newHighScore: false, coins: 0, kills: 0, time: 0 };
 
 // Shop selection, and the menu screen to go back to
 let shopIndex = 0;
@@ -237,8 +239,27 @@ let announcedLevel = 1;
 // Tode above the start and game over titles (decorative, so screen readers skip it)
 const TITLE_TODE_HTML = '<img class="title-tode" src="/tode.svg" alt="" width="96" height="88">';
 
+// Runs can't start until every model is loaded (before that Tode has no body to collide with)
+let modelsLoaded = false;
+Promise.all([playerReady, enemyReady, houseTemplateReady]).then(() => {
+  modelsLoaded = true;
+  if (state === 'start') renderOverlay();
+});
+
+const startButtonHtml = (label) =>
+  modelsLoaded
+    ? `<button type="button" class="primary" data-start>${label}</button>`
+    : '<button type="button" class="primary" data-start disabled>Loading&hellip;</button>';
+
 const UPGRADES_BUTTON_HTML =
   '<button type="button" class="link" data-shop>Upgrades <kbd>U</kbd></button>';
+
+// "12 kills · survived 1:05"
+function formatRunStats() {
+  const seconds = Math.floor(lastRun.time);
+  const time = `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
+  return `${lastRun.kills} ${lastRun.kills === 1 ? 'kill' : 'kills'} &middot; survived ${time}`;
+}
 
 function renderOverlay() {
   // Keyboard users moving through the mode or attack buttons stay on them after a re-render
@@ -248,19 +269,22 @@ function renderOverlay() {
   overlay.classList.toggle('game-over', state === 'gameover');
   overlay.hidden = state === 'playing';
 
+  // Every menu sits on one panel, built like a block of the game's checkerboard ground
+  let html = null;
+
   if (state === 'start') {
-    overlay.innerHTML = `
+    html = `
       ${TITLE_TODE_HTML}
       <h1 id="overlay-title">Tode's Escape</h1>
       <p>Choose a mode with <kbd>A</kbd>/<kbd>D</kbd>, then press <kbd>Space</kbd> to start</p>
       ${modeListHtml()}
       ${attackListHtml()}
-      <button type="button" class="primary" data-start>Start</button>
+      ${startButtonHtml('Start')}
       <p class="best">Best in ${getMode().name}: ${getHighScore()}</p>
       <p class="coins">Coins: ${getCoins()} &middot; ${UPGRADES_BUTTON_HTML}</p>
       ${CONTROLS_HTML}`;
   } else if (state === 'shop') {
-    overlay.innerHTML = `
+    html = `
       <h1 id="overlay-title">Upgrades</h1>
       <p class="coins">Coins: ${getCoins()}</p>
       ${shopHtml()}
@@ -269,29 +293,31 @@ function renderOverlay() {
         <kbd>W</kbd>/<kbd>S</kbd> choose &middot; <kbd>Space</kbd> buy &middot; <kbd>U</kbd> or <kbd>Esc</kbd> back
       </p>`;
   } else if (state === 'levelup') {
-    overlay.innerHTML = `
+    html = `
       <h1 id="overlay-title">Level up!</h1>
       <p>Pick an upgrade for this run</p>
       ${levelUpHtml()}
       <p class="controls"><kbd>1</kbd>/<kbd>2</kbd>/<kbd>3</kbd> or <kbd>A</kbd>/<kbd>D</kbd> and <kbd>Space</kbd></p>`;
   } else if (state === 'paused') {
-    overlay.innerHTML = `
+    html = `
       <h1 id="overlay-title">Paused</h1>
       <button type="button" class="primary" data-resume>Resume</button>
       <p class="controls">Press <kbd>P</kbd> or <kbd>Esc</kbd> to continue</p>`;
   } else if (state === 'gameover') {
-    overlay.innerHTML = `
+    html = `
       ${TITLE_TODE_HTML}
       <h1 id="overlay-title">Game Over</h1>
       <p class="final">Score: ${lastRun.score}</p>
+      <p class="run-stats">${formatRunStats()}</p>
       ${lastRun.newHighScore ? '<p class="new-best">New high score!</p>' : `<p class="best">Best in ${getMode().name}: ${getHighScore()}</p>`}
       <p class="coins">+${lastRun.coins} coins &middot; ${getCoins()} total &middot; ${UPGRADES_BUTTON_HTML}</p>
-      <button type="button" class="primary" data-start>Play again</button>
+      ${startButtonHtml('Play again')}
       <p>Press <kbd>Space</kbd> to play again</p>
       ${modeListHtml()}
       ${attackListHtml()}`;
   }
 
+  if (html !== null) overlay.innerHTML = `<div class="menu-panel">${html}</div>`;
   focusSelection(listFocus);
 }
 
@@ -319,12 +345,15 @@ function gameOver() {
   const score = getScore();
   const coins = Math.floor(score * getStats().coinGain);
   addCoins(coins);
-  lastRun = { score, newHighScore: stopScore(), coins };
-  announce(`Game over. Score ${score}.${lastRun.newHighScore ? ' New high score!' : ''} Earned ${coins} coins.`);
+  lastRun = { score, newHighScore: stopScore(), coins, ...getRunStats() };
+  announce(
+    `Game over. Score ${score}.${lastRun.newHighScore ? ' New high score!' : ''} ${lastRun.kills} kills. Earned ${coins} coins.`
+  );
   renderOverlay();
 }
 
 function startGame() {
+  if (!modelsLoaded) return;
   resetRun(getBaseStats());
   resetPlayer();
   resetEnemies(scene);
@@ -520,9 +549,12 @@ overlay.addEventListener('focusin', (event) => {
   }
 });
 
-// Pause automatically when the player switches away from the tab
+// Pause automatically when the player switches away from the tab or the window loses focus
 document.addEventListener('visibilitychange', () => {
   if (document.hidden && state === 'playing') pauseGame();
+});
+window.addEventListener('blur', () => {
+  if (state === 'playing') pauseGame();
 });
 
 const playerTouchesEnemy = () =>

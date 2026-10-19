@@ -39,7 +39,15 @@ let model = null;
 let groundOffset = 0;
 
 const loader = new GLTFLoader();
-loader.load('/models/tode.glb', (gltf) => {
+// Resolves once Tode's model is in place and the collision radius is known
+export const playerReady = new Promise((resolve) => {
+  loader.load('/models/tode.glb', (gltf) => {
+    setUpModel(gltf);
+    resolve();
+  });
+});
+
+function setUpModel(gltf) {
   model = gltf.scene;
   model.scale.setScalar(MODEL_SCALE);
   model.rotation.x = Math.PI / 2;
@@ -54,7 +62,7 @@ loader.load('/models/tode.glb', (gltf) => {
 
   player.userData.radius = computeCollisionRadius(model);
   player.add(model);
-});
+}
 
 // Current jump speed, scaled by setPlayerSpeed
 let moveSpeed = MOVE_SPEED;

@@ -62,7 +62,15 @@ function createHealthBar() {
 }
 
 const loader = new GLTFLoader();
-loader.load('/models/enemy.glb', (gltf) => {
+// Resolves once enemies can be spawned
+export const enemyReady = new Promise((resolve) => {
+  loader.load('/models/enemy.glb', (gltf) => {
+    setUpTemplate(gltf);
+    resolve();
+  });
+});
+
+function setUpTemplate(gltf) {
   const model = gltf.scene;
   model.scale.setScalar(5);
   model.rotation.x = Math.PI / 2;
@@ -77,7 +85,7 @@ loader.load('/models/enemy.glb', (gltf) => {
   template = model;
   templateRadius = computeCollisionRadius(model);
   templateHeight = box.max.z - box.min.z;
-});
+}
 
 function createEnemy(spawnPoint) {
   const enemy = new THREE.Group();
