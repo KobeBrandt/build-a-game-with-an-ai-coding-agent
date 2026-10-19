@@ -3,9 +3,10 @@ title: Build a Game with an AI Coding Agent
 language: English
 summary: "<p>Build a 3D browser game step by step – with the help of an AI coding\
   \ agent.</p>\n<p>In this project-based course, you'll plan, build, and polish a\
-  \ complete game inside WebStorm, using AI coding agents to turn ideas into working\
-  \ code. \nFollow the story of Tode the Frog, or customize the visuals and make the\
-  \ game your own. No grades – just hands-on building and your creativity.</p>"
+  \ complete game inside WebStorm or other JetBrains IDEs, using AI coding agents\
+  \ to turn ideas into working code. \nFollow the story of Tode the Frog, or customize\
+  \ the visuals and make the game your own. No grades – just hands-on building and\
+  \ your creativity.</p>"
 programming_language: JavaScript
 content:
   - Introduction
@@ -50,5 +51,8 @@ additional_files:
   - name: AGENTS.md
     visible: true
 mode: Study
+vendor:
+  name: JetBrains s.r.o.
+  url: https://plugins.jetbrains.com/vendor/JetBrains
 feedback_link: https://plugins.jetbrains.com/plugin/30327-build-a-game-with-an-ai-coding-agent/reviews
 yaml_version: 6

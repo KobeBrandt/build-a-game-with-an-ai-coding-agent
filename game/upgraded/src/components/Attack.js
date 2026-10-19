@@ -36,7 +36,26 @@ const SPIT_RANGE = 320; // base distance a glob flies before it pops
 const SPIT_RADIUS = 7;
 const SPIT_HEIGHT = 10;
 
-let currentAttack = ATTACKS[0];
+const ATTACK_KEY = 'tode-attack';
+
+// The last attack picked is remembered between visits when the browser allows it
+function loadAttack() {
+  try {
+    return ATTACKS.find((attack) => attack.id === localStorage.getItem(ATTACK_KEY)) ?? ATTACKS[0];
+  } catch {
+    return ATTACKS[0];
+  }
+}
+
+function saveAttack() {
+  try {
+    localStorage.setItem(ATTACK_KEY, currentAttack.id);
+  } catch {
+    // Storage blocked (private window etc.): the choice just lasts for this visit
+  }
+}
+
+let currentAttack = loadAttack();
 
 export function getAttack() {
   return currentAttack;
@@ -44,13 +63,16 @@ export function getAttack() {
 
 export function setAttackById(id) {
   const attack = ATTACKS.find((candidate) => candidate.id === id);
-  if (attack) currentAttack = attack;
+  if (!attack) return;
+  currentAttack = attack;
+  saveAttack();
 }
 
 // Step through the attacks in menu order, wrapping around at either end
 export function cycleAttack(step) {
   const index = ATTACKS.indexOf(currentAttack);
   currentAttack = ATTACKS[(index + step + ATTACKS.length) % ATTACKS.length];
+  saveAttack();
 }
 
 const attackCircle = new THREE.Mesh(
@@ -224,7 +246,7 @@ function updateGlobs(scene, delta, enemies) {
       }
     }
 
-    if (entry.travelled >= entry.range || overlapsObstacle(mesh.position.x, mesh.position.y, SPIT_RADIUS)) {
+    if (entry.travelled >= entry.range || overlapsObstacle(mesh.position.x, mesh.position.y, glob.userData.radius)) {
       scene.remove(mesh);
       globs.splice(i, 1);
     }

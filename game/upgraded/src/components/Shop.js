@@ -5,7 +5,7 @@ const PROGRESS_KEY = 'tode-progress';
 export const BASE_UPGRADES = [
   { id: 'speed', name: 'Swift Legs', description: '+6% hop speed', maxLevel: 5, baseCost: 40 },
   { id: 'cooldown', name: 'Quick Recovery', description: '-6% attack cooldown', maxLevel: 5, baseCost: 40 },
-  { id: 'radius', name: 'Big Shockwave', description: '+8% attack reach', maxLevel: 5, baseCost: 50 },
+  { id: 'radius', name: 'Long Reach', description: '+8% attack reach', maxLevel: 5, baseCost: 50 },
   { id: 'damage', name: 'Strong Jaw', description: '+10% attack damage', maxLevel: 5, baseCost: 50 },
   { id: 'shield', name: 'Extra Life', description: 'Start each run with +1 shield', maxLevel: 2, baseCost: 150 },
   { id: 'xp', name: 'Fast Learner', description: '+15% XP', maxLevel: 5, baseCost: 30 },

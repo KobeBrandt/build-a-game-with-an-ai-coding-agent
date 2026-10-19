@@ -1,16 +1,27 @@
-/* Frog and pond palette, taken from Tode's own greens (public/tode.svg) */
+/* Palette taken from the game world itself, so the menus look like part of it:
+   the checkerboard ground (Map.js), the trees and rocks (Scenery.js) and the houses (small_house.glb) */
 :root {
-  --frog: #21d789; /* Tode's body */
-  --frog-dark: #13bc6f; /* Tode's feet */
-  --pond: #0b3d2c; /* deep pond water, panel background */
-  --pond-deep: #062419; /* panel outline and drop shadow */
-  --lily: #1a6b47; /* lily pad, button background */
-  --lily-light: #2a8a5e;
-  --cream: #f4fbe9; /* text */
-  --fly: #ffd84a; /* gold: coins, selection, ready */
-  --tongue: #ff7a9c; /* XP bar */
-  --danger: #ffb3a7;
-  --panel-shadow: 0 4px 0 var(--pond-deep), 0 8px 18px rgba(0, 0, 0, 0.35);
+  --grass-dark: #228b22; /* dark checkerboard tile */
+  --grass-light: #90ee90; /* light checkerboard tile */
+  --grass-shade: #86e386; /* light tile in shade, for the panel's checker pattern */
+  --leaf: #2e7d32; /* tree foliage */
+  --leaf-deep: #1b5e20; /* darkest foliage: outlines and the sides of blocks */
+  --pick: #1e7a1e; /* selected button (a little darker than the dark tile, so white text stays readable) */
+  --wall: #ffffff; /* house walls: buttons and HUD panels */
+  --wall-hover: #effbea;
+  --wall-side: #b7c7b0; /* shaded side of a wall block */
+  --roof: #d93a2b; /* house roof: main action, selection border */
+  --roof-hover: #ec4a3a;
+  --roof-side: #8f2219;
+  --trunk: #6b3f14; /* tree trunk, darkened for readable text: coins and costs */
+  --rock: #d5d9d0; /* rock grey: an attack recharging */
+  --ink: #123312; /* text */
+  --tongue: #ff7a9c; /* the Tongue attack's pink: XP bar */
+  --danger: #a3261b;
+  --sky: rgba(135, 206, 235, 0.35);
+  /* Blocks have a solid "side face" under them, like the extruded low-poly models */
+  --block-side: 0 5px 0 var(--leaf-deep);
+  --panel-shadow: 0 5px 0 var(--leaf-deep), 0 10px 18px rgba(0, 0, 0, 0.25);
   --font: 'Fredoka', 'Trebuchet MS', system-ui, sans-serif;
 }
 
@@ -21,31 +32,31 @@ body {
   font-family: var(--font);
 }
 
-/* Keys look like little cream lily-pad keycaps */
+/* Keys are little white blocks with a shaded side */
 kbd {
   display: inline-block;
   min-width: 1em;
   padding: 2px 8px;
-  border: 2px solid var(--pond-deep);
+  border: 2px solid var(--leaf-deep);
   border-bottom-width: 4px;
-  border-radius: 8px;
-  background: var(--cream);
-  color: var(--pond);
+  border-radius: 4px;
+  background: var(--wall);
+  color: var(--ink);
   font-family: inherit;
   font-weight: 600;
   line-height: 1.2;
   text-align: center;
 }
 
-/* Every HUD panel is a rounded lily pad with a chunky drop shadow, like Tode's flat blocks */
+/* Every HUD panel is a white block, like the house walls, with a dark green side */
 .score,
 .level,
 .run-hud {
-  border: 3px solid var(--frog-dark);
-  border-radius: 16px;
-  background: var(--pond);
+  border: 3px solid var(--leaf-deep);
+  border-radius: 6px;
+  background: var(--wall);
   box-shadow: var(--panel-shadow);
-  color: var(--cream);
+  color: var(--ink);
   pointer-events: none;
   user-select: none;
 }
@@ -65,7 +76,6 @@ kbd {
 .score-best {
   font-size: 1rem;
   font-weight: 500;
-  opacity: 0.85;
 }
 
 .score-pop .score-value {
@@ -75,7 +85,7 @@ kbd {
 
 @keyframes score-pop {
   40% {
-    color: var(--fly);
+    color: var(--roof);
     transform: scale(1.3);
   }
 }
@@ -89,7 +99,7 @@ kbd {
   font-weight: 500;
 }
 
-/* Cooldown meter: a gold fly charges up while the bar fills */
+/* Cooldown meter: grey like a rock while it recharges, bright grass when ready */
 .attack-meter {
   position: fixed;
   bottom: 24px;
@@ -98,9 +108,9 @@ kbd {
   height: 28px;
   transform: translateX(-50%);
   overflow: hidden;
-  border: 3px solid var(--frog-dark);
-  border-radius: 14px;
-  background: var(--pond);
+  border: 3px solid var(--leaf-deep);
+  border-radius: 6px;
+  background: var(--wall);
   box-shadow: var(--panel-shadow);
   pointer-events: none;
   user-select: none;
@@ -109,36 +119,29 @@ kbd {
 .attack-meter-fill {
   position: absolute;
   inset: 0;
-  background: var(--lily-light);
+  background: var(--rock);
   transform-origin: left;
 }
 
 .attack-meter.ready {
-  border-color: var(--fly);
+  border-color: var(--roof);
 }
 
 .attack-meter.ready .attack-meter-fill {
-  background: var(--frog);
-}
-
-/* Dark label on the bright ready bar keeps the contrast up */
-.attack-meter.ready span {
-  color: var(--pond-deep);
-  text-shadow: none;
+  background: var(--grass-light);
 }
 
 .attack-meter span {
   position: relative;
   display: block;
-  color: var(--cream);
+  color: var(--ink);
   font-size: 0.9375rem;
   font-weight: 600;
   line-height: 22px;
   text-align: center;
-  text-shadow: 0 1px 2px var(--pond-deep), 0 0 4px var(--pond-deep);
 }
 
-/* Menus float over a dark pond with soft ripple rings */
+/* Menus: the world stays visible under a light sky haze */
 .overlay {
   position: fixed;
   inset: 0;
@@ -148,11 +151,9 @@ kbd {
   justify-content: safe center;
   padding: 16px;
   overflow-y: auto;
-  background:
-    repeating-radial-gradient(circle at 12% 88%, transparent 0 34px, rgba(33, 215, 137, 0.07) 34px 37px, transparent 37px 72px),
-    repeating-radial-gradient(circle at 90% 12%, transparent 0 40px, rgba(33, 215, 137, 0.06) 40px 43px, transparent 43px 84px),
-    radial-gradient(ellipse at center, rgba(11, 61, 44, 0.72), rgba(6, 36, 25, 0.9));
-  color: var(--cream);
+  background: var(--sky);
+  backdrop-filter: blur(3px);
+  color: var(--ink);
   font-family: var(--font);
   text-align: center;
   user-select: none;
@@ -162,15 +163,30 @@ kbd {
   display: none;
 }
 
+/* The menu panel is a chunk of the game's checkerboard ground, with a dark green side face */
+.menu-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  box-sizing: border-box;
+  width: fit-content;
+  max-width: min(760px, 100%);
+  padding: 20px 32px 16px;
+  border: 4px solid var(--leaf-deep);
+  border-radius: 8px;
+  background: repeating-conic-gradient(var(--grass-light) 0 25%, var(--grass-shade) 0 50%) 0 0 / 80px 80px;
+  box-shadow: 0 10px 0 var(--leaf-deep), 0 18px 30px rgba(0, 0, 0, 0.3);
+}
+
 .overlay button {
   font: inherit;
   color: inherit;
   cursor: pointer;
 }
 
-/* Keyboard focus ring: thick, high contrast, outside the card's own border */
+/* Keyboard focus ring: thick, dark, outside the button's own border */
 .overlay button:focus-visible {
-  outline: 3px solid #fff;
+  outline: 3px solid var(--ink);
   outline-offset: 3px;
 }
 
@@ -192,7 +208,7 @@ kbd {
   width: clamp(64px, 14vw, 96px);
   height: auto;
   margin-bottom: -6px;
-  filter: drop-shadow(0 4px 0 var(--pond-deep));
+  filter: drop-shadow(0 4px 0 var(--leaf-deep));
   animation: tode-hop 1.6s ease-in-out infinite;
 }
 
@@ -215,15 +231,20 @@ kbd {
   }
 }
 
+/* Title: white block letters, extruded downwards like the low-poly models */
 .overlay h1 {
-  margin: 0 0 12px;
-  color: var(--frog);
+  margin: 0 0 16px;
+  color: var(--wall);
   font-size: clamp(2.5rem, 9vw, 4rem);
   font-weight: 700;
   letter-spacing: 0.02em;
-  -webkit-text-stroke: 2px var(--pond-deep);
+  -webkit-text-stroke: 3px var(--leaf-deep);
   paint-order: stroke fill;
-  text-shadow: 0 5px 0 var(--pond-deep), 0 10px 20px rgba(0, 0, 0, 0.4);
+  text-shadow:
+    0 2px 0 var(--leaf-deep),
+    0 4px 0 var(--leaf-deep),
+    0 6px 0 var(--leaf-deep),
+    0 10px 12px rgba(0, 0, 0, 0.25);
 }
 
 .overlay p {
@@ -236,21 +257,21 @@ kbd {
   font-weight: 700;
 }
 
-.overlay .best {
+.overlay .best,
+.overlay .run-stats {
   font-size: 1.125rem;
-  opacity: 0.85;
 }
 
 .overlay .new-best {
-  color: var(--fly);
+  color: var(--roof-side);
   font-weight: 700;
   animation: score-pop 0.8s ease-out 4 alternate;
 }
 
 .overlay .controls {
   margin-top: 12px;
+  margin-bottom: 0;
   font-size: 1rem;
-  opacity: 0.9;
 }
 
 .overlay .controls kbd {
@@ -258,13 +279,13 @@ kbd {
   padding: 0 6px;
 }
 
-/* Mode, attack, shop and level-up buttons are lily pads that sink when pressed */
+/* Mode, attack, shop and level-up buttons are white blocks that sink onto their side face when pressed */
 .modes button,
 .shop button,
 .choices button {
-  border: 3px solid var(--pond-deep);
-  background: var(--lily);
-  box-shadow: 0 4px 0 var(--pond-deep);
+  border: 3px solid var(--leaf-deep);
+  background: var(--wall);
+  box-shadow: var(--block-side);
   transition:
     transform 0.08s ease-out,
     box-shadow 0.08s ease-out,
@@ -274,15 +295,15 @@ kbd {
 .modes button:hover,
 .shop button:hover,
 .choices button:hover {
-  background: var(--lily-light);
+  background: var(--wall-hover);
 }
 
 .modes button:active,
 .shop button:active,
 .choices button:active,
 .overlay .primary:active {
-  transform: translateY(3px);
-  box-shadow: 0 1px 0 var(--pond-deep);
+  transform: translateY(4px);
+  box-shadow: 0 1px 0 var(--leaf-deep);
 }
 
 .modes {
@@ -290,30 +311,27 @@ kbd {
   flex-wrap: wrap;
   justify-content: center;
   gap: 12px;
-  margin: 8px 0 18px;
+  margin: 8px 0 20px;
   padding: 0;
   list-style: none;
 }
 
 .modes button {
   padding: 10px 16px;
-  border-radius: 18px;
+  border-radius: 6px;
   font-size: 1.125rem;
   font-weight: 600;
 }
 
+/* Selected: a dark grass tile with a red roof border */
 .modes button[aria-pressed='true'] {
-  border-color: var(--fly);
-  background: var(--frog-dark);
-  color: var(--pond-deep);
+  border-color: var(--roof);
+  background: var(--pick);
+  color: var(--wall);
 }
 
 .modes button[aria-pressed='true']:hover {
-  background: var(--frog);
-}
-
-.modes button[aria-pressed='true'] small {
-  opacity: 1;
+  background: var(--leaf-deep);
 }
 
 /* Selected mode gets a tick too, so it isn't shown by colour alone */
@@ -338,7 +356,6 @@ kbd {
   margin-top: 4px;
   font-size: 0.875rem;
   font-weight: 500;
-  opacity: 0.85;
 }
 
 .run-hud {
@@ -353,15 +370,15 @@ kbd {
   font-weight: 500;
 }
 
-/* XP bar fills up in Tode's tongue pink */
+/* XP bar fills up in the Tongue's pink */
 .xp-bar {
   position: relative;
   width: 160px;
   height: 22px;
   overflow: hidden;
-  border: 2px solid var(--pond-deep);
-  border-radius: 11px;
-  background: var(--lily);
+  border: 2px solid var(--leaf-deep);
+  border-radius: 4px;
+  background: var(--rock);
 }
 
 .xp-bar-fill {
@@ -380,7 +397,6 @@ kbd {
   font-weight: 600;
   line-height: 18px;
   text-align: center;
-  text-shadow: 0 1px 2px var(--pond-deep), 0 0 4px var(--pond-deep);
 }
 
 .shields.empty {
@@ -391,7 +407,7 @@ kbd {
   content: '';
   position: fixed;
   inset: 0;
-  background: rgba(33, 215, 137, 0.45);
+  background: rgba(144, 238, 144, 0.5);
   pointer-events: none;
   animation: shield-flash 0.5s ease-out forwards;
 }
@@ -405,14 +421,15 @@ kbd {
 .overlay .coins {
   font-size: 1.125rem;
   font-weight: 600;
-  color: var(--fly);
+  color: var(--trunk);
 }
 
 .overlay .link {
   padding: 4px 6px;
   border: none;
-  border-radius: 6px;
+  border-radius: 4px;
   background: none;
+  color: var(--ink);
   text-decoration: underline;
 }
 
@@ -422,15 +439,15 @@ kbd {
   text-decoration: none;
 }
 
-/* Main action: a big, bright frog-green button */
+/* Main action: a big red block, like the house roofs */
 .overlay .primary {
   margin: 0 0 16px;
   padding: 10px 40px;
-  border: 3px solid var(--pond-deep);
-  border-radius: 999px;
-  background: var(--frog);
-  box-shadow: 0 5px 0 var(--pond-deep), 0 10px 18px rgba(0, 0, 0, 0.35);
-  color: var(--pond-deep);
+  border: 3px solid var(--roof-side);
+  border-radius: 6px;
+  background: var(--roof);
+  box-shadow: 0 5px 0 var(--roof-side), 0 10px 18px rgba(0, 0, 0, 0.25);
+  color: var(--wall);
   font-size: 1.5rem;
   font-weight: 700;
   transition:
@@ -440,14 +457,29 @@ kbd {
 }
 
 .overlay .primary:hover {
-  background: #4ae6a2;
+  background: var(--roof-hover);
+}
+
+.overlay .primary:active {
+  box-shadow: 0 1px 0 var(--roof-side);
+}
+
+/* Start stays greyed out like a rock while the models load */
+.overlay .primary:disabled {
+  border-color: var(--leaf-deep);
+  background: var(--rock);
+  box-shadow: var(--block-side);
+  color: var(--ink);
+  cursor: wait;
+  transform: none;
 }
 
 .shop {
   display: grid;
-  gap: 10px;
-  width: min(480px, 100%);
-  margin: 8px 0 18px;
+  gap: 12px;
+  width: 480px;
+  max-width: 100%;
+  margin: 8px 0 20px;
   padding: 0;
   list-style: none;
   text-align: left;
@@ -460,32 +492,28 @@ kbd {
   grid-template-columns: 1fr auto;
   gap: 2px 12px;
   padding: 8px 14px;
-  border-radius: 14px;
+  border-radius: 6px;
   cursor: pointer;
 }
 
 .shop button.selected,
 .choices button.selected {
-  border-color: var(--fly);
-  background: var(--lily-light);
+  border-color: var(--roof);
+  background: var(--wall-hover);
 }
 
 .shop strong {
   font-weight: 600;
 }
 
-/* Level pips are little lily pads: filled green, empty outlined */
+/* Level pips: filled dark grass, empty outlined */
 .shop .pips {
-  color: var(--frog);
+  color: var(--grass-dark);
   letter-spacing: 2px;
 }
 
-.shop small {
-  opacity: 0.85;
-}
-
 .shop .cost {
-  color: var(--fly);
+  color: var(--trunk);
   font-weight: 700;
   text-align: right;
 }
@@ -503,12 +531,12 @@ kbd {
   flex-wrap: wrap;
   justify-content: center;
   gap: 14px;
-  margin: 8px 0 18px;
+  margin: 8px 0 20px;
   padding: 0;
   list-style: none;
 }
 
-/* Level-up cards are round lily pads */
+/* Level-up cards are tall white blocks */
 .choices button {
   display: flex;
   height: 100%;
@@ -517,7 +545,7 @@ kbd {
   gap: 6px;
   width: 170px;
   padding: 16px 14px;
-  border-radius: 28px;
+  border-radius: 6px;
   cursor: pointer;
 }
 
@@ -526,14 +554,9 @@ kbd {
   font-weight: 600;
 }
 
-.choices small {
-  font-size: 0.875rem;
-  opacity: 0.9;
-}
-
+.choices small,
 .choices .stacks {
   font-size: 0.875rem;
-  opacity: 0.9;
 }
 
 /* Players who ask their system for less motion get no pops, pulses, hops or full-screen flash */

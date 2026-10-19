@@ -1,17 +1,37 @@
-# Build a Game with an AI Coding Agent
-[![official JetBrains project](http://jb.gg/badges/official.svg)](https://confluence.jetbrains.com/display/ALL/JetBrains+on+GitHub) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-<a href="https://www.coursera.org/learn/jb-build-game-with-ai-agent/" target="_blank">
-<img src="https://img.shields.io/badge/Coursera-0056D2?style=for-the-badge&logo=Coursera&logoColor=white&style=flat" alt="Course%20catalog"></a>
-<a href="https://plugins.jetbrains.com/plugin/30327-build-a-game-with-ai-coding-agent/versions" target="_blank">
-<img src="https://img.shields.io/badge/dynamic/yaml?query=%24.course_version&url=https://raw.githubusercontent.com/jetbrains-academy/game-course/refs/heads/main/course-remote-info.yaml&logo=jetbrains&logoColor=FC801D&label=Marketplace&color=6b59fe&style=flat&prefix=v" alt="Marketplace"></a>
+# Tode's Escape
 
-Build a 3D browser game step by step – with the help of an AI coding agent.
+A 3D browser game about Tode the Frog, built with [three.js](https://threejs.org/) and [Vite](https://vite.dev/)
+while working through the JetBrains Academy course
+[Build a Game with an AI Coding Agent](https://github.com/jetbrains-academy/game-course).
 
-In this project-based course, you'll plan, build, and polish a complete game inside WebStorm, using AI coding agents to turn ideas into working code. Follow the story of Tode the Frog, or customize the visuals and make the game your own. No grades – just hands-on building and your creativity.
+This is a personal project. It is not an official JetBrains project and is not maintained by JetBrains.
 
-## Want to know more?
-If you have questions about the course or the tasks, or if you find any errors, feel free to ask questions and participate 
-in discussions within the repository [issues](https://github.com/jetbrains-academy/game-course/issues).
+## What is in this repository
 
-## Contribution
-Please be sure to review the [project's contributing guidelines](https://github.com/jetbrains-academy/.github/blob/main/contributing_guidelines.md) to learn how to help the project.
+- `game/src` – the game as built by following the course tasks.
+- `game/upgraded` – an extended copy of the game with extra features: game modes, three attacks,
+  enemy health, a shop, roguelite level-up upgrades, a restyled UI and an accessibility pass.
+  See [game/upgraded/README.md](game/upgraded/README.md) for the full list.
+- `Introduction`, `Skeleton`, `Core_loop`, `Visual`, `Conclusion` – the course lessons and task descriptions
+  from the original JetBrains Academy course.
+
+## Run the game
+
+Requires [Node.js](https://nodejs.org/) 20.19 or later.
+
+```bash
+cd game
+npm install
+npm run dev            # course version
+npm run dev:upgraded   # upgraded version
+```
+
+## Credits
+
+- Course material, lesson structure and game models: [JetBrains Academy](https://github.com/jetbrains-academy/game-course),
+  licensed under the MIT License.
+- Game changes and upgrades: Kobe Brandt.
+
+## License
+
+[MIT](LICENSE)

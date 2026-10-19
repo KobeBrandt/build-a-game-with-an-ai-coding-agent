@@ -11,7 +11,7 @@ const CHOICE_COUNT = 3;
 export const RUN_UPGRADES = [
   { id: 'speed', name: 'Swift Hops', description: '+10% hop speed', maxStacks: 5, apply: (s) => { s.playerSpeed *= 1.1; } },
   { id: 'cooldown', name: 'Quick Recharge', description: '-12% attack cooldown', maxStacks: 5, apply: (s) => { s.attackCooldown *= 0.88; } },
-  { id: 'radius', name: 'Wider Shockwave', description: '+15% attack reach', maxStacks: 4, apply: (s) => { s.attackRadius *= 1.15; } },
+  { id: 'radius', name: 'Longer Reach', description: '+15% attack reach', maxStacks: 4, apply: (s) => { s.attackRadius *= 1.15; } },
   { id: 'damage', name: 'Heavy Hits', description: '+15% attack damage', maxStacks: 4, apply: (s) => { s.attackDamage *= 1.15; } },
   { id: 'shield', name: 'Shield', description: 'Survive one more hit', maxStacks: 3, apply: (s) => { s.shields += 1; } },
   { id: 'slow', name: 'Sticky Ground', description: '-8% enemy speed', maxStacks: 4, apply: (s) => { s.enemySpeed *= 0.92; } },

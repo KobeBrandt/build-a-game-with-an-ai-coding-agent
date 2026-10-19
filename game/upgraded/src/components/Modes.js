@@ -9,7 +9,26 @@ export const MODES = [
   { key: '3', name: 'Hunter', description: 'Few fast enemies', enemySpeed: 75, spawnDelay: 6, maxEnemies: 6, enemyHealth: 18 },
 ];
 
-let currentMode = MODES[0];
+const MODE_KEY = 'tode-mode';
+
+// The last mode played is remembered between visits when the browser allows it
+function loadMode() {
+  try {
+    return MODES.find((mode) => mode.key === localStorage.getItem(MODE_KEY)) ?? MODES[0];
+  } catch {
+    return MODES[0];
+  }
+}
+
+function saveMode() {
+  try {
+    localStorage.setItem(MODE_KEY, currentMode.key);
+  } catch {
+    // Storage blocked (private window etc.): the choice just lasts for this visit
+  }
+}
+
+let currentMode = loadMode();
 
 export function getMode() {
   return currentMode;
@@ -19,6 +38,7 @@ export function setModeByKey(key) {
   const mode = MODES.find((candidate) => candidate.key === key);
   if (!mode) return false;
   currentMode = mode;
+  saveMode();
   return true;
 }
 
@@ -26,4 +46,5 @@ export function setModeByKey(key) {
 export function cycleMode(step) {
   const index = MODES.indexOf(currentMode);
   currentMode = MODES[(index + step + MODES.length) % MODES.length];
+  saveMode();
 }

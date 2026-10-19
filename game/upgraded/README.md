@@ -30,8 +30,10 @@ This starts the normal Vite dev server and opens `/upgraded/`. The upgraded game
 | Score | Best score per mode, saved in the browser | `components/Score.js` |
 | Score | Score "pops" on every kill | `components/Score.js`, `src/style.css` |
 | Start, play, game over | Start screen with mode select and controls | `src/main.js` |
-| Start, play, game over | Pause with `P` or `Esc`, and auto-pause when the tab is hidden | `src/main.js` |
-| Start, play, game over | Game over screen shows the final score and "New high score!" | `src/main.js` |
+| Start, play, game over | Pause with `P` or `Esc`, and auto-pause when the tab is hidden or the window loses focus | `src/main.js` |
+| Start, play, game over | Game over screen shows the final score, kills, time survived and "New high score!" | `src/main.js`, `components/Score.js` |
+| Start, play, game over | Start and Play again stay greyed out ("Loading…") until Tode, the enemy and the house models have loaded | `src/main.js`, `components/Player.js`, `components/Enemy.js`, `src/style.css` |
+| Start, play, game over | The chosen mode and attack are remembered between visits | `components/Modes.js`, `components/Attack.js` |
 | Increasing complexity | Mode and level indicator in the top-right corner | `components/Difficulty.js`, `src/main.js` |
 | Game world | Grassy texture painted over the checkerboard | `components/Map.js` |
 | Game world | Trees and rocks built from simple shapes, which block movement like houses | `components/Scenery.js`, `components/Map.js` |
@@ -39,16 +41,14 @@ This starts the normal Vite dev server and opens `/upgraded/`. The upgraded game
 | Roguelite | XP from kills and survival; every level up pauses the run to pick 1 of 3 random in-game upgrades that last until game over. See [In-game upgrades](#in-game-upgrades-level-up) | `components/RunUpgrades.js`, `src/main.js` |
 | Roguelite | Shields absorb a hit and knock out nearby enemies; XP bar and shield count in the top-left corner | `src/main.js`, `src/style.css` |
 | Controls | WASD as well as the arrow keys; `A`/`D` change the mode in the menu | `components/Player.js`, `src/main.js` |
-| UI | Frog-style menus and HUD: Tode's greens, a dark pond backdrop with ripples, lily-pad buttons that sink when pressed, a hopping Tode above the title and a rounded font. See [Frog-style UI](#frog-style-ui) | `index.html`, `src/main.js`, `src/style.css` |
+| UI | Menus and HUD in the game world's style: checkerboard grass panel, white wall blocks with dark green sides, red roof buttons and a light sky haze over the world. See [Game-world UI](#game-world-ui) | `index.html`, `src/main.js`, `src/style.css` |
 | Accessibility | WCAG 2.2 and Game Accessibility Guidelines pass over the menus and HUD. See [Accessibility](#accessibility) | `index.html`, `src/main.js`, `src/style.css` |
 
 ## Attacks
 
 Pick an attack on the start or game over screen with `Q`/`E`, a click, or `Tab` and `Enter`.
-The choice lasts until you change it (it is not saved when the page reloads).
+The choice is saved in the browser (`localStorage` key `tode-attack`), like the chosen mode (`tode-mode`).
 
-| Attack | How it fires | Base cooldown | Base reach | What it hits |
-| --- | --- | --- | --- | --- |
 | Attack | How it fires | Base cooldown | Base damage | Base reach | What it hits |
 | --- | --- | --- | --- | --- | --- |
 | Shockwave | `Space` | 1 s | 10 | 60 around Tode | Every enemy in the circle |
@@ -57,7 +57,7 @@ The choice lasts until you change it (it is not saved when the page reloads).
 
 The cooldown, reach and damage upgrades (shop, level-up and difficulty scaling) apply to every attack:
 cooldown upgrades shorten each attack's own cooldown, reach upgrades grow the Shockwave circle,
-the Tongue's reach, and Spit's range and glob size, and damage upgrades raise each attack's own damage.
+the Tongue's reach, and Spit's range and glob size (a bigger glob also pops on houses sooner), and damage upgrades raise each attack's own damage.
 
 ## Enemy health and damage
 
@@ -106,7 +106,7 @@ Each level costs `base cost × (current level + 1)` coins, so the first level co
 | --- | --- | --- | --- | --- | --- |
 | Swift Legs | +6% hop speed | 5 | 40 | 40, 80, 120, 160, 200 | 600 |
 | Quick Recovery | -6% attack cooldown | 5 | 40 | 40, 80, 120, 160, 200 | 600 |
-| Big Shockwave | +8% attack reach | 5 | 50 | 50, 100, 150, 200, 250 | 750 |
+| Long Reach | +8% attack reach | 5 | 50 | 50, 100, 150, 200, 250 | 750 |
 | Strong Jaw | +10% attack damage | 5 | 50 | 50, 100, 150, 200, 250 | 750 |
 | Extra Life | Start each run with +1 shield | 2 | 150 | 150, 300 | 450 |
 | Fast Learner | +15% XP | 5 | 30 | 30, 60, 90, 120, 150 | 450 |
@@ -128,7 +128,7 @@ If every upgrade is maxed, a **Continue** button appears instead.
 | --- | --- | --- |
 | Swift Hops | +10% hop speed | 5 |
 | Quick Recharge | -12% attack cooldown | 5 |
-| Wider Shockwave | +15% attack reach | 4 |
+| Longer Reach | +15% attack reach | 4 |
 | Heavy Hits | +15% attack damage | 4 |
 | Shield | Survive one more hit | 3 |
 | Sticky Ground | -8% enemy speed | 4 |
@@ -137,25 +137,29 @@ If every upgrade is maxed, a **Continue** button appears instead.
 
 In-game upgrades multiply: for example two Swift Hops picks give `1.1 × 1.1` = +21% hop speed.
 
-## Frog-style UI
+## Game-world UI
 
-The menus and HUD now match Tode instead of plain black boxes. All colours are CSS variables at the top of `src/style.css`.
+The menus and HUD use the colours and shapes of the game world itself, so they look like part of it.
+All colours are CSS variables at the top of `src/style.css`.
 
-| Colour | Value | Used for |
-| --- | --- | --- |
-| Frog | `#21d789` (Tode's body in `public/tode.svg`) | Title, Start/Play again/Resume button, ready attack meter, upgrade pips |
-| Frog dark | `#13bc6f` (Tode's feet) | HUD panel borders, selected mode and attack |
-| Pond / pond deep | `#0b3d2c` / `#062419` | Panel and overlay background, outlines and drop shadows |
-| Lily pad | `#1a6b47` / `#2a8a5e` | Menu buttons and cards, hover and selected cards |
-| Fly gold | `#ffd84a` | Coins, costs, the selection border, the ready attack meter border |
-| Tongue pink | `#ff7a9c` | XP bar fill |
+| Colour | Value | Taken from | Used for |
+| --- | --- | --- | --- |
+| Grass light / shade | `#90ee90` / `#86e386` | Light checkerboard tile (`components/Map.js`) | Menu panel checker pattern, ready attack meter |
+| Grass dark / pick | `#228b22` / `#1e7a1e` | Dark checkerboard tile | Upgrade pips; selected mode and attack (a little darker so white text stays readable) |
+| Leaf deep | `#1b5e20` | Darkest tree foliage (`components/Scenery.js`) | Outlines, the side faces of every block, title outline |
+| Wall | `#ffffff` | House walls (`public/models/small_house.glb`) | Buttons, cards, HUD panels, keycaps, title letters |
+| Roof / roof side | `#d93a2b` / `#8f2219` | House roof | Start/Play again/Resume button, selection border, ready attack meter border, score pop |
+| Rock | `#d5d9d0` | Rocks | Recharging attack meter, empty XP bar, loading Start button |
+| Trunk | `#6b3f14` | Tree trunks, darkened for contrast | Coins and costs |
+| Tongue pink | `#ff7a9c` | The Tongue attack | XP bar fill |
 
+- **Blocks:** like the low-poly models, every panel and button is a near-square block with a solid dark green "side face" under it (a hard bottom shadow). Buttons sink onto that side face when pressed.
+- **Menus:** the world stays visible behind a light sky-blue haze with a slight blur. Each menu sits on one panel that looks like a chunk of the checkerboard ground. Modes, attacks, shop items and level-up cards are white wall blocks; the selected one turns dark grass green with a red roof border.
+- **Main button:** Start, Play again and Resume are red roof blocks with white text. While the models load, Start is a grey rock block.
+- **HUD:** score, level, XP and the attack meter sit on white wall panels with dark text.
+- **Title:** white block letters with a dark green outline, extruded downwards like the 3D models. Tode (`public/tode.svg`) hops above it on the start screen, and lies belly-up on the game over screen.
 - **Font:** [Fredoka](https://fonts.google.com/specimen/Fredoka) from Google Fonts (`index.html`), a rounded, chunky font. Without a connection it falls back to Trebuchet MS, then the system font.
-- **HUD:** score, level, XP and the attack meter sit on dark pond panels with a green border and a chunky drop shadow, like the flat blocks Tode is built from.
-- **Menus:** the overlay is a dark pond with faint ripple rings. Modes, attacks, shop items and level-up cards are lily-pad buttons with a dark outline and a bottom shadow; they sink 3px when pressed. Level-up cards are extra round.
-- **Title:** a big green title with a dark outline and shadow. Tode (`public/tode.svg`) hops above it on the start screen, and lies belly-up on the game over screen.
-- **Keys:** `<kbd>` keys look like cream keycaps with a thick bottom edge.
-- **Accessibility kept:** the white focus ring, the ✓ on the selected mode and attack, and "(need N more)" on prices are unchanged. Tode's picture has an empty `alt` because it is decoration. The ready attack meter switches to a dark label so the text stays readable on the bright green. With reduced motion on, Tode doesn't hop and buttons don't animate.
+- **Accessibility kept:** the ✓ on the selected mode and attack and "(need N more)" on prices are unchanged. The focus ring is now dark instead of white, so it shows on the light panel. All text is at least 4.5:1 against its background, except the big white text on the red button (bold 24px, large text, at least 3:1). Tode's picture has an empty `alt` because it is decoration. With reduced motion on, Tode doesn't hop and buttons don't animate.
 
 ## Accessibility
 
@@ -165,7 +169,7 @@ Built against WCAG 2.2 AA and the basic tier of the [Game Accessibility Guidelin
 | --- | --- | --- |
 | Every menu choice (modes, attacks, Start, Play again, Upgrades, shop cards, Back, level-up cards, Resume, Continue) is a real `<button>`, so it works with Tab, Enter, mouse, touch and screen readers | 2.1.1 Keyboard, 4.1.2 Name, Role, Value | `src/main.js` |
 | Each screen moves focus to the current choice; Tab moves the selection with the focus; Space or Enter on a focused button presses only that button | 2.4.3 Focus Order | `src/main.js` |
-| Thick white focus ring (3px, offset 3px) on keyboard focus | 2.4.7 Focus Visible, 2.4.11 Focus Not Obscured | `src/style.css` |
+| Thick dark focus ring (3px, offset 3px) on keyboard focus | 2.4.7 Focus Visible, 2.4.11 Focus Not Obscured | `src/style.css` |
 | Mouse users can start, play again and resume (before, only the keyboard could) | 2.1.1 Keyboard, 2.5 Input Modalities | `src/main.js` |
 | The 3D canvas is hidden from screen readers; the menu overlay is a dialog labelled by its title | 1.3.1 Info and Relationships, 4.1.2 Name, Role, Value | `index.html`, `src/main.js` |
 | A polite live region reads out mode changes, purchases, shields used, new difficulty levels and the game over score | 4.1.3 Status Messages | `src/main.js` |
@@ -174,7 +178,7 @@ Built against WCAG 2.2 AA and the basic tier of the [Game Accessibility Guidelin
 | The selected mode has a tick (✓) as well as a gold border; unaffordable upgrades say "(need N more)" instead of only turning red | 1.4.1 Use of Color | `src/main.js`, `src/style.css` |
 | Upgrade levels and pick counts have hidden text for screen readers (the pips are hidden) | 1.1.1 Non-text Content | `src/main.js` |
 | Font sizes in `rem`, no text smaller than 14px, title scales down on narrow screens, the overlay scrolls when zoomed in | 1.4.4 Resize Text, 1.4.10 Reflow | `src/style.css` |
-| Pause with `P`/`Esc` or the **Resume** button, auto-pause when the tab is hidden; keys pressed while paused don't carry into the game | 2.2.2 Pause, Stop, Hide | `src/main.js` |
+| Pause with `P`/`Esc` or the **Resume** button, auto-pause when the tab is hidden or the window loses focus; keys pressed while paused don't carry into the game | 2.2.2 Pause, Stop, Hide | `src/main.js` |
 
 Not done yet: adjustable game speed, key remapping and on-screen touch controls.
 
