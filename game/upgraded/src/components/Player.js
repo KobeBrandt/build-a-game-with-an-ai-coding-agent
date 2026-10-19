@@ -41,7 +41,7 @@ let groundOffset = 0;
 const loader = new GLTFLoader();
 // Resolves once Tode's model is in place and the collision radius is known
 export const playerReady = new Promise((resolve) => {
-  loader.load('/models/tode.glb', (gltf) => {
+  loader.load(import.meta.env.BASE_URL + 'models/tode.glb', (gltf) => {
     setUpModel(gltf);
     resolve();
   });

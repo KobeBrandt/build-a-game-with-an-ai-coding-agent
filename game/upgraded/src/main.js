@@ -237,7 +237,7 @@ let levelUpIndex = 0;
 let announcedLevel = 1;
 
 // Tode above the start and game over titles (decorative, so screen readers skip it)
-const TITLE_TODE_HTML = '<img class="title-tode" src="/tode.svg" alt="" width="96" height="88">';
+const TITLE_TODE_HTML = `<img class="title-tode" src="${import.meta.env.BASE_URL}tode.svg" alt="" width="96" height="88">`;
 
 // Runs can't start until every model is loaded (before that Tode has no body to collide with)
 let modelsLoaded = false;
