@@ -2,6 +2,8 @@ import * as THREE from 'three';
 import { damageEnemy } from './Enemy.js';
 import { getFacing } from './Player.js';
 import { isTouching, overlapsObstacle } from './Collision.js';
+import { getSixteenth, judge, registerJudgement } from './Rhythm.js';
+import { SFX } from './Audio.js';
 
 // Attacks the player picks from on the start and game over screens.
 // `cooldown` is the base seconds between uses and `damage` the base damage per hit;
@@ -13,7 +15,7 @@ import { isTouching, overlapsObstacle } from './Collision.js';
 // - Spit pierces a whole line of enemies, so it sits in between.
 export const ATTACKS = [
   { id: 'shockwave', name: 'Shockwave', description: 'Space: hit everything around you', cooldown: 1, damage: 10, auto: false },
-  { id: 'tongue', name: 'Tongue', description: 'Auto: lashes the nearest enemy', cooldown: 0.55, damage: 6, auto: true },
+  { id: 'tongue', name: 'Tongue', description: 'Auto: lashes the nearest enemy', cooldown: 0.5, damage: 6, auto: true },
   { id: 'spit', name: 'Spit', description: 'Space: piercing shot ahead', cooldown: 0.7, damage: 7, auto: false },
 ];
 
@@ -23,6 +25,8 @@ const ATTACK_FADE_DURATION = 0.3; // seconds the circle stays visible
 const ATTACK_OPACITY = 0.6;
 const SHOCKWAVE_DURATION = 0.4; // seconds the ring takes to expand to the attack radius
 const SHOCKWAVE_WIDTH = 4;
+const SHOCKWAVE_COLOR = 0xfff6a0;
+const ON_BEAT_COLOR = 0x39c5bb; // the shockwave ring turns teal when it lands on the beat
 
 // Tongue tuning
 const TONGUE_RANGE = 120; // base reach, measured to the enemy's edge
@@ -91,7 +95,7 @@ attackCircle.visible = false;
 const shockwave = new THREE.Mesh(
   new THREE.RingGeometry(ATTACK_RADIUS - SHOCKWAVE_WIDTH, ATTACK_RADIUS, 64),
   new THREE.MeshBasicMaterial({
-    color: 0xfff6a0,
+    color: SHOCKWAVE_COLOR,
     transparent: true,
     opacity: 0,
     depthWrite: false,
@@ -132,6 +136,9 @@ let cooldownRemaining = 0;
 let fadeRemaining = 0;
 let shockwaveElapsed = SHOCKWAVE_DURATION;
 let attackRequested = false;
+let attackPressTime = 0; // event.timeStamp of the press, judged against the beat when the attack fires
+// Last 16th note the Tongue checked, so it only lashes on a new 16th (in time with the music)
+let lastTongueStep = null;
 
 // Tongue animation: offset from Tode to the target at the moment of the lash
 let tongueElapsed = TONGUE_DURATION;
@@ -153,16 +160,18 @@ window.addEventListener('keydown', (event) => {
   if (event.code !== 'Space') return;
 
   event.preventDefault();
-  if (!event.repeat) attackRequested = true;
+  if (!event.repeat) {
+    attackRequested = true;
+    attackPressTime = event.timeStamp;
+  }
 });
 
 const distanceTo = (player, enemy) =>
   Math.hypot(enemy.position.x - player.position.x, enemy.position.y - player.position.y);
 
 // Damage every enemy whose body touches the attack area; returns how many were defeated
-function hitEnemies(scene, player, enemies) {
+function hitEnemies(scene, player, enemies, damage) {
   const radius = ATTACK_RADIUS * currentRadiusMultiplier;
-  const damage = attackDamage();
   let kills = 0;
   for (let i = enemies.length - 1; i >= 0; i--) {
     const enemy = enemies[i];
@@ -173,10 +182,12 @@ function hitEnemies(scene, player, enemies) {
   return kills;
 }
 
-function fireShockwave(scene, player, enemies) {
+function fireShockwave(scene, player, enemies, damage, onBeat) {
   fadeRemaining = ATTACK_FADE_DURATION;
   shockwaveElapsed = 0;
-  return hitEnemies(scene, player, enemies);
+  shockwave.material.color.setHex(onBeat ? ON_BEAT_COLOR : SHOCKWAVE_COLOR);
+  SFX.shockwave();
+  return hitEnemies(scene, player, enemies, damage);
 }
 
 // The closest enemy whose edge is within the tongue's reach, or null
@@ -200,11 +211,13 @@ function lashTongue(scene, player, target) {
   tongueLength = Math.hypot(dx, dy);
   tongue.rotation.z = Math.atan2(dy, dx);
   tongueElapsed = 0;
+  SFX.tongue();
   return damageEnemy(scene, target, attackDamage(), player.position.x, player.position.y) ? 1 : 0;
 }
 
-function shootSpit(scene, player) {
+function shootSpit(scene, player, damage) {
   const facing = getFacing();
+  SFX.spit();
   const mesh = new THREE.Mesh(spitGeometry, spitMaterial);
   mesh.position.set(player.position.x, player.position.y, SPIT_HEIGHT);
   mesh.castShadow = true;
@@ -215,7 +228,7 @@ function shootSpit(scene, player) {
     dirY: facing.y,
     travelled: 0,
     range: SPIT_RANGE * currentRadiusMultiplier,
-    damage: attackDamage(),
+    damage,
     hit: new Set(),
   });
 }
@@ -261,18 +274,28 @@ export function updateAttack(scene, delta, player, enemies) {
 
   cooldownRemaining = Math.max(0, cooldownRemaining - delta);
 
+  // True on the first frame of each 16th note (always true without music)
+  const step = getSixteenth();
+  const onStep = step === null || step !== lastTongueStep;
+  lastTongueStep = step;
+
   if (cooldownRemaining === 0) {
     if (currentAttack.id === 'tongue') {
-      // The tongue fires on its own as soon as an enemy is in reach
-      const target = findTongueTarget(player, enemies);
+      // The tongue fires on its own as soon as an enemy is in reach, on the next 16th note
+      const target = onStep ? findTongueTarget(player, enemies) : null;
       if (target) {
         cooldownRemaining = attackCooldown();
         kills += lashTongue(scene, player, target);
       }
     } else if (attackRequested) {
       cooldownRemaining = attackCooldown();
-      if (currentAttack.id === 'spit') shootSpit(scene, player);
-      else kills += fireShockwave(scene, player, enemies);
+      // An attack pressed on the beat hits harder and counts towards the combo
+      const judgement = judge(attackPressTime);
+      registerJudgement(judgement);
+      const damage = attackDamage() * (judgement?.damage ?? 1);
+      const onBeat = judgement !== null && judgement.grade !== 'miss';
+      if (currentAttack.id === 'spit') shootSpit(scene, player, damage);
+      else kills += fireShockwave(scene, player, enemies, damage, onBeat);
     }
   }
   // Presses during cooldown are dropped, not buffered
@@ -318,6 +341,7 @@ export function resetAttack(scene) {
   shockwaveElapsed = SHOCKWAVE_DURATION;
   tongueElapsed = TONGUE_DURATION;
   attackRequested = false;
+  lastTongueStep = null;
   attackCircle.visible = false;
   shockwave.visible = false;
   tongue.visible = false;

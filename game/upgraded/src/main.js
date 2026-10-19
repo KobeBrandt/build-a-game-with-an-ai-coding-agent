@@ -1,6 +1,14 @@
 import * as THREE from 'three';
 import './style.css';
-import { clearQueuedMoves, player, playerReady, resetPlayer, setPlayerSpeed, updatePlayer } from './components/Player.js';
+import {
+  clearQueuedMoves,
+  isMoveKey,
+  player,
+  playerReady,
+  resetPlayer,
+  setPlayerSpeed,
+  updatePlayer,
+} from './components/Player.js';
 import { Camera } from './components/Camera.js';
 import { Renderer } from './components/Renderer.js';
 import {
@@ -51,6 +59,18 @@ import {
   rollChoices,
   useShield,
 } from './components/RunUpgrades.js';
+import { isMuted, pauseAudio, resumeAudio, setMusicIntensity, SFX, stopMusic, toggleMute } from './components/Audio.js';
+import {
+  beatRing,
+  getBeatPulse,
+  getComboMultiplier,
+  getRhythmStats,
+  judge,
+  registerJudgement,
+  startRhythm,
+  updateRhythm,
+  updateRhythmHud,
+} from './components/Rhythm.js';
 
 // Shadow tuning: the sun follows the player, so only the area around it needs a shadow map
 const SUN_OFFSET = new THREE.Vector3(-100, -100, 200);
@@ -83,6 +103,11 @@ const map = GameMap();
 scene.add(map);
 
 scene.add(player);
+player.add(beatRing);
+
+// Enemies bob to the beat; skipped for players who ask their system for less motion
+const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+const ENEMY_BOB_HEIGHT = 4;
 
 const camera = Camera();
 player.add(camera);
@@ -143,7 +168,7 @@ function modeListHtml() {
     (mode) => `
       <li>
         <button type="button" data-mode="${mode.key}" aria-pressed="${mode === current}">
-          <kbd>${mode.key}</kbd> ${mode.name} <small>${mode.description}</small>
+          <kbd>${mode.key}</kbd> ${mode.name} <small>${mode.description} &middot; ${mode.bpm} BPM</small>
         </button>
       </li>`
   ).join('');
@@ -170,7 +195,9 @@ const CONTROLS_HTML = `
     <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> or <kbd>&larr;</kbd><kbd>&uarr;</kbd><kbd>&darr;</kbd><kbd>&rarr;</kbd> hop
     &middot; <kbd>Space</kbd> attack (Tongue fires on its own)
     &middot; <kbd>P</kbd> pause
-  </p>`;
+    &middot; <kbd>M</kbd> sound
+  </p>
+  <p class="controls rhythm-tip">Hop and attack on the beat for combos: on-beat attacks hit harder, and combos multiply kill points (up to &times;3)</p>`;
 
 function shopHtml() {
   const items = BASE_UPGRADES.map((upgrade, index) => {
@@ -223,7 +250,7 @@ function levelUpHtml() {
 
 // 'start' | 'shop' | 'playing' | 'paused' | 'levelup' | 'gameover'
 let state = 'start';
-let lastRun = { score: 0, newHighScore: false, coins: 0, kills: 0, time: 0 };
+let lastRun = { score: 0, newHighScore: false, coins: 0, kills: 0, time: 0, bestCombo: 0, perfects: 0 };
 
 // Shop selection, and the menu screen to go back to
 let shopIndex = 0;
@@ -260,6 +287,9 @@ function formatRunStats() {
   const time = `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
   return `${lastRun.kills} ${lastRun.kills === 1 ? 'kill' : 'kills'} &middot; survived ${time}`;
 }
+
+// "Best combo 14 · 9 perfect"
+const formatRhythmStats = () => `Best combo ${lastRun.bestCombo} &middot; ${lastRun.perfects} perfect`;
 
 function renderOverlay() {
   // Keyboard users moving through the mode or attack buttons stay on them after a re-render
@@ -309,6 +339,7 @@ function renderOverlay() {
       <h1 id="overlay-title">Game Over</h1>
       <p class="final">Score: ${lastRun.score}</p>
       <p class="run-stats">${formatRunStats()}</p>
+      <p class="run-stats">${formatRhythmStats()}</p>
       ${lastRun.newHighScore ? '<p class="new-best">New high score!</p>' : `<p class="best">Best in ${getMode().name}: ${getHighScore()}</p>`}
       <p class="coins">+${lastRun.coins} coins &middot; ${getCoins()} total &middot; ${UPGRADES_BUTTON_HTML}</p>
       ${startButtonHtml('Play again')}
@@ -345,7 +376,9 @@ function gameOver() {
   const score = getScore();
   const coins = Math.floor(score * getStats().coinGain);
   addCoins(coins);
-  lastRun = { score, newHighScore: stopScore(), coins, ...getRunStats() };
+  lastRun = { score, newHighScore: stopScore(), coins, ...getRunStats(), ...getRhythmStats() };
+  stopMusic();
+  SFX.gameOver();
   announce(
     `Game over. Score ${score}.${lastRun.newHighScore ? ' New high score!' : ''} ${lastRun.kills} kills. Earned ${coins} coins.`
   );
@@ -359,6 +392,7 @@ function startGame() {
   resetEnemies(scene);
   resetAttack(scene);
   resetScore();
+  startRhythm(getMode().bpm);
   announcedLevel = getLevel(0);
   player.visible = true;
   state = 'playing';
@@ -367,6 +401,7 @@ function startGame() {
 
 function pauseGame() {
   state = 'paused';
+  pauseAudio();
   renderOverlay();
 }
 
@@ -374,6 +409,7 @@ function resumeGame() {
   // Keys pressed while paused were meant for the menu, not for the game
   clearAttackRequest();
   clearQueuedMoves();
+  resumeAudio();
   state = 'playing';
   renderOverlay();
 }
@@ -422,7 +458,9 @@ function buyAt(index) {
   renderOverlay();
 }
 
+// The music keeps playing over the level-up screen; the combo only fades during play
 function openLevelUp() {
+  if (state !== 'levelup') SFX.levelUp();
   state = 'levelup';
   levelUpChoices = rollChoices();
   levelUpIndex = 0;
@@ -485,6 +523,18 @@ function handleLevelUpKey(event) {
 // Registered after Attack.js, so this runs after its Space handler; resetAttack drops that press
 window.addEventListener('keydown', (event) => {
   if (event.repeat) return;
+
+  // Sound on/off works on every screen
+  if (event.code === 'KeyM') {
+    announce(toggleMute() ? 'Sound off' : 'Sound on');
+    return;
+  }
+
+  // Hops are judged against the beat the moment the key goes down (attacks when they fire)
+  if (state === 'playing' && isMoveKey(event.code)) {
+    registerJudgement(judge(event.timeStamp));
+    return;
+  }
 
   // Space or Enter on a focused overlay button presses that button, and only that button
   const focusedButton = overlay.contains(document.activeElement) ? document.activeElement.closest('button') : null;
@@ -583,6 +633,7 @@ function absorbHit() {
       SHIELD_BLAST_RADIUS + enemy.userData.radius
   );
   for (const enemy of nearby) defeatEnemy(scene, enemy);
+  SFX.shield();
   addKills(nearby.length);
   addKillXp(nearby.length);
   const shieldsLeft = getStats().shields;
@@ -596,7 +647,9 @@ function absorbHit() {
 
 function updateHud() {
   const level = getLevel(getScore());
-  levelElement.textContent = `${getMode().name} · Level ${level}`;
+  levelElement.textContent = `${getMode().name} · Level ${level}${isMuted() ? ' · Muted' : ''}`;
+  // More layers join the music as the danger grows
+  setMusicIntensity(level >= 4 ? 3 : level >= 2 ? 2 : 1);
   if (state === 'playing' && level > announcedLevel) {
     announcedLevel = level;
     announce(`Level ${level}`);
@@ -613,6 +666,10 @@ function updateHud() {
   const shields = stats ? stats.shields : getBaseStats().shields;
   shieldsElement.textContent = `Shields: ${shields}`;
   shieldsElement.classList.toggle('empty', shields === 0);
+
+  updateRhythmHud(state === 'playing' || state === 'levelup' || state === 'paused');
+  const bob = reducedMotion.matches ? 0 : getBeatPulse() * ENEMY_BOB_HEIGHT;
+  for (const enemy of enemies) enemy.position.z = bob;
 }
 
 const clock = new THREE.Clock();
@@ -634,7 +691,8 @@ renderer.setAnimationLoop(() => {
       else gameOver();
     } else {
       const kills = updateAttack(scene, delta, player, enemies);
-      addKills(kills);
+      addKills(kills, getComboMultiplier());
+      updateRhythm(delta);
       addKillXp(kills);
       addSurvivalXp(delta);
       updateScore(delta);

@@ -19,6 +19,8 @@
   --tongue: #ff7a9c; /* the Tongue attack's pink: XP bar */
   --danger: #a3261b;
   --sky: rgba(135, 206, 235, 0.35);
+  --beat: #39c5bb; /* rhythm teal: beat markers, the ground ring, on-beat shockwaves */
+  --beat-deep: #137a72; /* darker teal for borders and outlined text */
   /* Blocks have a solid "side face" under them, like the extruded low-poly models */
   --block-side: 0 5px 0 var(--leaf-deep);
   --panel-shadow: 0 5px 0 var(--leaf-deep), 0 10px 18px rgba(0, 0, 0, 0.25);
@@ -559,6 +561,133 @@ kbd {
   font-size: 0.875rem;
 }
 
+/* Beat track: markers slide in from both sides and meet in the target on every beat */
+.beat-hud {
+  position: fixed;
+  bottom: 72px;
+  left: 50%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  transform: translateX(-50%);
+  border: 3px solid var(--leaf-deep);
+  border-radius: 6px;
+  background: var(--wall);
+  box-shadow: var(--panel-shadow);
+  color: var(--ink);
+  pointer-events: none;
+  user-select: none;
+}
+
+.beat-hud[hidden] {
+  display: none;
+}
+
+.beat-hud.on-fire {
+  border-color: var(--beat-deep);
+}
+
+.beat-track {
+  position: relative;
+  width: 260px;
+  height: 22px;
+  overflow: hidden;
+  border-radius: 4px;
+  background: var(--rock);
+}
+
+.beat-marker,
+.beat-target {
+  position: absolute;
+  top: 2px;
+  left: 50%;
+  height: 18px;
+  border-radius: 3px;
+}
+
+.beat-marker {
+  width: 6px;
+  margin-left: -3px;
+  background: var(--beat-deep);
+}
+
+.beat-target {
+  width: 18px;
+  margin-left: -11px;
+  border: 2px solid var(--ink);
+  border-radius: 50%;
+  top: 0;
+  background: var(--wall);
+}
+
+.beat-target.hit {
+  animation: beat-hit 0.25s ease-out;
+}
+
+@keyframes beat-hit {
+  30% {
+    background: var(--beat);
+    transform: scale(1.4);
+  }
+}
+
+.beat-combo {
+  font-size: 0.9375rem;
+  font-weight: 600;
+}
+
+/* "Perfect!" pops up above the track in outlined block letters, like the title */
+.beat-judgement {
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  margin-bottom: 6px;
+  color: var(--wall);
+  font-size: 1.5rem;
+  font-weight: 700;
+  white-space: nowrap;
+  -webkit-text-stroke: 2px var(--leaf-deep);
+  paint-order: stroke fill;
+  opacity: 0;
+  transform: translateX(-50%);
+}
+
+.beat-judgement[data-grade='perfect'] {
+  color: var(--beat);
+  -webkit-text-stroke-color: var(--ink);
+}
+
+.beat-judgement[data-grade='miss'] {
+  color: var(--rock);
+  font-size: 1.125rem;
+}
+
+.beat-judgement.show {
+  animation: judgement-pop 0.5s ease-out;
+}
+
+@keyframes judgement-pop {
+  0% {
+    opacity: 1;
+    transform: translateX(-50%) scale(1.3);
+  }
+  60% {
+    opacity: 1;
+    transform: translateX(-50%) translateY(-6px) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-10px);
+  }
+}
+
+.overlay .rhythm-tip {
+  max-width: 34em;
+  margin-top: 6px;
+}
+
 /* Players who ask their system for less motion get no pops, pulses, hops or full-screen flash */
 @media (prefers-reduced-motion: reduce) {
   *,
@@ -570,5 +699,10 @@ kbd {
 
   .shield-flash::after {
     display: none;
+  }
+
+  /* Without the pop animation the judgement would never show, so just show it */
+  .beat-judgement.show {
+    opacity: 1;
   }
 }
