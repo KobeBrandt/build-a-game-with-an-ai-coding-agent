@@ -9,13 +9,17 @@ import {
   wouldCollide,
   wouldHitObstacle,
 } from './Collision.js';
-import { TILE_SIZE } from './Map.js';
 import { getMode } from './Modes.js';
 import { getSecondsPerBeat, SFX } from './Audio.js';
 import { getCurrentBeat } from './Rhythm.js';
 
 // Enemy tuning (speed, spawn delay and enemy cap come from the selected game mode)
-const SPAWN_DISTANCE = TILE_SIZE * 8; // spawn points sit this far from the player on each axis
+// New enemies appear on a circle around the player, in a random direction, just outside the view:
+// close enough that the first one arrives within seconds, far enough that none pops in on screen
+const SPAWN_RADIUS = 300;
+const SPAWN_TRIES = 8; // random directions tried per frame before waiting for the next frame
+const WAVE_TRIES = 16;
+const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5)); // spreads a wave's enemies evenly around the circle
 const DESPAWN_DISTANCE = 1200; // enemies left this far behind are removed
 const DEFEAT_DURATION = 0.25; // seconds a defeated enemy takes to spin and shrink away
 const SPAWN_DURATION = 0.35; // seconds a new enemy takes to grow in
@@ -35,21 +39,14 @@ const HOPPER_HOP_HEIGHT = 12;
 const HOPPER_CROUCH = 0.18; // how low a hopper crouches just before its hop (the tell)
 const HOPPER_CROUCH_BEATS = 0.3; // how long before the beat it starts to crouch
 const NO_MUSIC_BEAT = 0.5; // seconds between hops when there is no music
-// Spawn points relative to the player (the corners of a square around it)
-const SPAWN_OFFSETS = [
-  new THREE.Vector2(-SPAWN_DISTANCE, -SPAWN_DISTANCE),
-  new THREE.Vector2(SPAWN_DISTANCE, -SPAWN_DISTANCE),
-  new THREE.Vector2(SPAWN_DISTANCE, SPAWN_DISTANCE),
-  new THREE.Vector2(-SPAWN_DISTANCE, SPAWN_DISTANCE),
-];
-// Waves also use the middle of each side
-const WAVE_OFFSETS = [
-  ...SPAWN_OFFSETS,
-  new THREE.Vector2(0, -SPAWN_DISTANCE),
-  new THREE.Vector2(SPAWN_DISTANCE, 0),
-  new THREE.Vector2(0, SPAWN_DISTANCE),
-  new THREE.Vector2(-SPAWN_DISTANCE, 0),
-];
+
+// Readability: enemies are drawn bigger than their collision body (a forgiving hitbox), and stand on
+// a bright danger ring so they stand out from the green ground
+const COLLISION_SCALE = 5; // model scale the collision radius is measured at
+const MODEL_SCALE = 6.5; // model scale enemies are drawn at
+const MARKER_COLOR = 0xff3b30;
+const HOPPER_MARKER_COLOR = 0xff4fb0;
+const MARKER_HEIGHT = 0.3;
 
 export const enemies = [];
 
@@ -89,10 +86,18 @@ export const enemyReady = new Promise((resolve) => {
   });
 });
 
+// Danger rings under enemies, built once the collision radius is known
+let markerGeometry = null;
+const markerMaterial = new THREE.MeshBasicMaterial({ color: MARKER_COLOR, transparent: true, opacity: 0.85, depthWrite: false });
+const hopperMarkerMaterial = markerMaterial.clone();
+hopperMarkerMaterial.color.setHex(HOPPER_MARKER_COLOR);
+
 function setUpTemplate(gltf) {
   const model = gltf.scene;
-  model.scale.setScalar(5);
   model.rotation.x = Math.PI / 2;
+  model.scale.setScalar(COLLISION_SCALE);
+  templateRadius = computeCollisionRadius(model);
+  model.scale.setScalar(MODEL_SCALE);
 
   // Lift the model so its lowest point sits flush on the ground (z = 0)
   const box = new THREE.Box3().setFromObject(model);
@@ -102,8 +107,8 @@ function setUpTemplate(gltf) {
   });
 
   template = model;
-  templateRadius = computeCollisionRadius(model);
   templateHeight = box.max.z - box.min.z;
+  markerGeometry = new THREE.RingGeometry(templateRadius * 1.1, templateRadius * 1.45, 32);
 
   // Hoppers get their own pink-tinted copies of the materials
   hopperTemplate = cloneSkinned(model);
@@ -140,6 +145,11 @@ function createEnemy(spawnPoint, hopper) {
   enemy.userData.hopTimer = 0; // seconds until the next hop, without music
   enemy.userData.healthBar = createHealthBar();
   enemy.add(enemy.userData.healthBar);
+  // The ring stays on the ground while the enemy bobs and hops (see keepMarkersOnGround)
+  const marker = new THREE.Mesh(markerGeometry, hopper ? hopperMarkerMaterial : markerMaterial);
+  marker.position.z = MARKER_HEIGHT;
+  enemy.add(marker);
+  enemy.userData.marker = marker;
   enemy.scale.setScalar(0.01);
   return enemy;
 }
@@ -165,10 +175,16 @@ export function setEnemyDifficulty(speedMultiplier, spawnDelayMultiplier, health
 }
 
 let spawnTimer = Infinity; // spawn the first enemy right away
-let nextSpawnIndex = 0;
 let lastSpawnBeat = null; // with music, enemies only spawn as a new beat starts
 
 const spawnPoint = new THREE.Vector2();
+
+function setSpawnPoint(player, angle) {
+  spawnPoint.set(
+    player.position.x + Math.cos(angle) * SPAWN_RADIUS,
+    player.position.y + Math.sin(angle) * SPAWN_RADIUS
+  );
+}
 
 function isSpawnPointFree(spawnPoint, bodies) {
   if (overlapsObstacle(spawnPoint.x, spawnPoint.y, templateRadius)) return false;
@@ -192,13 +208,16 @@ function spawnEnemies(scene, delta, player) {
   lastSpawnBeat = beatIndex;
   if (spawnTimer < spawnDelay || !newBeat || !template || enemies.length >= getMode().maxEnemies) return;
 
-  spawnPoint.set(player.position.x, player.position.y).add(SPAWN_OFFSETS[nextSpawnIndex]);
-  nextSpawnIndex = (nextSpawnIndex + 1) % SPAWN_OFFSETS.length;
-  // Occupied corner (enemy or house): try the next one on the following frame
-  if (!isSpawnPointFree(spawnPoint, [player, ...enemies])) return;
-
-  spawnTimer = 0;
-  addEnemy(scene, spawnPoint);
+  // A random direction each time, so the player can't learn where the next enemy comes from.
+  // If every try is blocked (enemies or houses), try again on the following frame.
+  const bodies = [player, ...enemies];
+  for (let i = 0; i < SPAWN_TRIES; i++) {
+    setSpawnPoint(player, Math.random() * Math.PI * 2);
+    if (!isSpawnPointFree(spawnPoint, bodies)) continue;
+    spawnTimer = 0;
+    addEnemy(scene, spawnPoint);
+    return;
+  }
 }
 
 /**
@@ -208,10 +227,10 @@ function spawnEnemies(scene, delta, player) {
 export function spawnWave(scene, player, count) {
   if (!template) return 0;
   let spawned = 0;
-  const start = Math.floor(Math.random() * WAVE_OFFSETS.length);
-  for (let i = 0; i < WAVE_OFFSETS.length && spawned < count; i++) {
+  const start = Math.random() * Math.PI * 2;
+  for (let i = 0; i < WAVE_TRIES && spawned < count; i++) {
     if (enemies.length >= getMode().maxEnemies) break;
-    spawnPoint.set(player.position.x, player.position.y).add(WAVE_OFFSETS[(start + i) % WAVE_OFFSETS.length]);
+    setSpawnPoint(player, start + i * GOLDEN_ANGLE);
     if (!isSpawnPointFree(spawnPoint, [player, ...enemies])) continue;
     addEnemy(scene, spawnPoint);
     spawned++;
@@ -431,6 +450,14 @@ export function updateEnemies(scene, delta, player) {
   return false;
 }
 
+/**
+ * Keep every danger ring flat on the ground, whatever height its enemy bobs or hops to.
+ * Call after the enemies' heights are set for the frame.
+ */
+export function keepMarkersOnGround() {
+  for (const enemy of enemies) enemy.userData.marker.position.z = MARKER_HEIGHT - enemy.position.z;
+}
+
 export function resetEnemies(scene) {
   for (const enemy of enemies) scene.remove(enemy);
   enemies.length = 0;
@@ -439,8 +466,7 @@ export function resetEnemies(scene) {
   enemySpeed = getMode().enemySpeed;
   spawnDelay = getMode().spawnDelay;
   enemyHealth = getMode().enemyHealth;
-  spawnTimer = Infinity; // spawn at the first corner right away again
-  nextSpawnIndex = 0;
+  spawnTimer = Infinity; // spawn the first enemy right away again
   lastSpawnBeat = null;
   hopperChance = 0;
 }

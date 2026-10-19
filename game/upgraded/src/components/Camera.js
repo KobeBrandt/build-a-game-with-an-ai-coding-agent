@@ -7,7 +7,8 @@ export function Camera() {
     1,
     9000
   );
-  camera.position.set(300, -300, 300);
+  // Steep enough that houses and trees rarely hide Tode, low enough to still see the world in 3D
+  camera.position.set(230, -230, 400);
   camera.up.set(0, 0, 1);
   camera.lookAt(0, 0, 0);
 

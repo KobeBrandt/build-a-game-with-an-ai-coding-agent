@@ -186,6 +186,12 @@ kbd {
   cursor: pointer;
 }
 
+/* Level-up and game over screens ignore input for a moment after they open (see lockMenuInput) */
+.overlay.input-locked button {
+  cursor: default;
+  opacity: 0.6;
+}
+
 /* Keyboard focus ring: thick, dark, outside the button's own border */
 .overlay button:focus-visible {
   outline: 3px solid var(--ink);
@@ -732,6 +738,34 @@ kbd {
   color: var(--roof);
   font-size: 1.5rem;
   -webkit-text-stroke-color: var(--wall);
+}
+
+/* Arrows on the screen edge pointing at enemies outside the view; the arrow shape points right
+   and is rotated toward the enemy (see Indicators.js) */
+.enemy-arrows {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.enemy-arrow {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 22px;
+  height: 22px;
+  background: var(--roof);
+  clip-path: polygon(0 0, 100% 50%, 0 100%, 25% 50%);
+  filter: drop-shadow(0 0 2px var(--wall));
+}
+
+.enemy-arrow.hopper {
+  background: #ff4fb0;
+}
+
+.enemy-arrow[hidden] {
+  display: none;
 }
 
 /* "Drop!" banner when the lead comes in with a big wave */

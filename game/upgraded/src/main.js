@@ -15,6 +15,7 @@ import {
   defeatEnemy,
   enemies,
   enemyReady,
+  keepMarkersOnGround,
   resetEnemies,
   setDamageListener,
   setEnemyDifficulty,
@@ -40,7 +41,7 @@ import {
 import { addKills, getHighScore, getRunStats, getScore, resetScore, stopScore, updateScore } from './components/Score.js';
 import { getDifficulty, getLevel } from './components/Difficulty.js';
 import { isTouching } from './components/Collision.js';
-import { GameMap, updateMap } from './components/Map.js';
+import { GameMap, updateMap, updateOccluders } from './components/Map.js';
 import { houseTemplateReady } from './components/House.js';
 import { cycleMode, getMode, MODES, setModeByKey } from './components/Modes.js';
 import {
@@ -107,6 +108,7 @@ import {
   updateEffects,
 } from './components/Effects.js';
 import { updateTouchControls } from './components/Touch.js';
+import { updateEnemyArrows } from './components/Indicators.js';
 
 // Shadow tuning: the sun follows the player, so only the area around it needs a shadow map
 const SUN_OFFSET = new THREE.Vector3(-100, -100, 200);
@@ -322,6 +324,21 @@ let shopReturnState = 'start';
 let levelUpChoices = [];
 let levelUpIndex = 0;
 
+// The level-up and game over screens open in the middle of play, often while the player is
+// pressing Space to attack. For a moment after they open, they ignore input, so a press meant
+// for the game can't pick an upgrade or start the next run unseen.
+const MENU_INPUT_DELAY = 600; // ms
+let menuInputLockedUntil = 0;
+
+function lockMenuInput() {
+  menuInputLockedUntil = performance.now() + MENU_INPUT_DELAY;
+  overlay.classList.add('input-locked');
+  setTimeout(() => overlay.classList.remove('input-locked'), MENU_INPUT_DELAY);
+}
+
+const menuInputLocked = () =>
+  (state === 'levelup' || state === 'gameover') && performance.now() < menuInputLockedUntil;
+
 // Difficulty level last read out to screen readers
 let announcedLevel = 1;
 
@@ -487,6 +504,7 @@ function gameOver() {
   lastRun = { score, newHighScore: stopScore(), coins, ...getRunStats(), ...getRhythmStats() };
   stopRhythm();
   SFX.gameOver();
+  lockMenuInput();
   announce(
     `Game over. Score ${score}.${lastRun.newHighScore ? ' New high score!' : ''} ${lastRun.kills} kills. Earned ${coins} coins.`
   );
@@ -630,7 +648,10 @@ function buyAt(index) {
 
 // The music keeps playing over the level-up screen; the combo only fades during play
 function openLevelUp() {
-  if (state !== 'levelup') SFX.levelUp();
+  if (state !== 'levelup') {
+    SFX.levelUp();
+    lockMenuInput();
+  }
   state = 'levelup';
   levelUpChoices = rollChoices();
   levelUpIndex = 0;
@@ -715,6 +736,12 @@ window.addEventListener('keydown', (event) => {
     return;
   }
 
+  if (menuInputLocked()) {
+    // Also stop Enter from pressing the focused button
+    if (CONFIRM_KEYS.includes(event.code)) event.preventDefault();
+    return;
+  }
+
   // Space or Enter on a focused overlay button presses that button, and only that button
   const focusedButton = overlay.contains(document.activeElement) ? document.activeElement.closest('button') : null;
   if (focusedButton && CONFIRM_KEYS.includes(event.code)) {
@@ -745,7 +772,7 @@ window.addEventListener('keyup', (event) => {
 // Overlay buttons: mouse, touch, Tab + Enter, and screen readers all come through here
 overlay.addEventListener('click', (event) => {
   const target = event.target.closest('button');
-  if (!target) return;
+  if (!target || menuInputLocked()) return;
   const { dataset } = target;
   const inMenu = state === 'start' || state === 'gameover';
 
@@ -814,14 +841,16 @@ window.addEventListener('blur', () => {
   if (state === 'playing') pauseGame();
 });
 
+const survivalTime = () => getRunStats().time;
+
 const playerTouchesEnemy = () =>
   enemies.some((enemy) =>
     isTouching(player.position.x, player.position.y, player.userData.radius, enemy)
   );
 
-// Difficulty multipliers, combined with the run's stats from base and in-game upgrades
-function applyDifficulty(score) {
-  const difficulty = getDifficulty(score);
+// Difficulty multipliers from the time survived, combined with the run's stats from base and in-game upgrades
+function applyDifficulty(seconds) {
+  const difficulty = getDifficulty(seconds);
   const stats = getStats();
   setEnemyDifficulty(difficulty.enemySpeed * stats.enemySpeed, difficulty.enemySpawnDelay, difficulty.enemyHealth);
   setPlayerSpeed(difficulty.playerSpeed * stats.playerSpeed);
@@ -857,7 +886,7 @@ function absorbHit() {
 }
 
 function updateHud() {
-  const level = getLevel(getScore());
+  const level = getLevel(survivalTime());
   levelElement.textContent = `${getMode().name} · Level ${level}${isMuted() ? ' · Muted' : ''}`;
   // More layers join the music as the danger grows
   setMusicIntensity(level >= 4 ? 3 : level >= 2 ? 2 : 1);
@@ -886,6 +915,7 @@ function updateHud() {
   const bob = reducedMotion.matches ? 0 : getBeatPulse() * ENEMY_BOB_HEIGHT;
   // Hoppers move up and down with their own hops
   for (const enemy of enemies) if (!enemy.userData.hopper) enemy.position.z = bob;
+  keepMarkersOnGround();
 
   updateTouchControls(state === 'playing', attack.auto);
 }
@@ -972,9 +1002,9 @@ renderer.setAnimationLoop(() => {
   hitstop = Math.max(0, hitstop - delta);
 
   if (state === 'playing' && !frozen) {
-    applyDifficulty(getScore());
+    applyDifficulty(survivalTime());
     followCooldown(getRawCooldown(), getAttack().auto);
-    updateWaves(getLevel(getScore()));
+    updateWaves(getLevel(survivalTime()));
 
     const playerHit = updatePlayer(delta);
     const enemyHit = playerHit || updateEnemies(scene, delta, player);
@@ -996,8 +1026,11 @@ renderer.setAnimationLoop(() => {
 
   updateHud();
   updateMap(map, player.position);
+  updateOccluders(player.position, cameraRest);
   updateEffects(state === 'paused' || state === 'levelup' ? 0 : delta, camera);
   camera.position.copy(cameraRest).add(getShakeOffset());
+  player.updateMatrixWorld();
+  updateEnemyArrows(state === 'playing' || state === 'paused' || state === 'levelup', enemies, player, camera);
 
   directionalLight.target.position.set(player.position.x, player.position.y, 0);
   directionalLight.position.copy(directionalLight.target.position).add(SUN_OFFSET);

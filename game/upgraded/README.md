@@ -39,6 +39,9 @@ Actions tab). To turn it on once, set **Settings > Pages > Source** to **GitHub 
 | Player movement | Squash-and-stretch on every hop | `components/Player.js` |
 | Adding enemies | Three game modes that tune spawn delay, speed and enemy cap: Classic, Horde (many slow enemies), Hunter (few fast enemies) | `components/Modes.js`, `components/Enemy.js` |
 | Adding enemies | Enemies pop into the world when they spawn | `components/Enemy.js` |
+| Adding enemies | Enemies spawn in a random direction just outside the view (300 units from Tode), so the first one arrives within seconds and spawns can't be predicted | `components/Enemy.js` |
+| Adding enemies | Readable enemies: drawn 1.3× bigger than their collision body (a forgiving hitbox), on a red danger ring (pink for hoppers) | `components/Enemy.js`, `src/main.js` |
+| Adding enemies | Arrows on the screen edge point at the 12 closest enemies outside the view; closer enemies get bigger, more solid arrows | `components/Indicators.js`, `src/style.css` |
 | Attack | Expanding shockwave ring on top of the fading circle | `components/Attack.js` |
 | Attack | Defeated enemies spin, rise and shrink away instead of vanishing | `components/Enemy.js` |
 | Attack | Cooldown meter at the bottom of the screen, labelled with the chosen attack | `src/main.js`, `src/style.css` |
@@ -49,11 +52,14 @@ Actions tab). To turn it on once, set **Settings > Pages > Source** to **GitHub 
 | Start, play, game over | Start screen with mode select and controls | `src/main.js` |
 | Start, play, game over | Pause with `P` or `Esc`, and auto-pause when the tab is hidden or the window loses focus | `src/main.js` |
 | Start, play, game over | Game over screen shows the final score, kills, time survived and "New high score!" | `src/main.js`, `components/Score.js` |
+| Start, play, game over | The level-up and game over screens ignore input for 0.6 s after they open, so a Space press meant as an attack can't pick an upgrade or restart the run unseen | `src/main.js`, `src/style.css` |
 | Start, play, game over | Start and Play again stay greyed out ("Loading…") until Tode, the enemy and the house models have loaded | `src/main.js`, `components/Player.js`, `components/Enemy.js`, `src/style.css` |
 | Start, play, game over | The chosen mode and attack are remembered between visits | `components/Modes.js`, `components/Attack.js` |
 | Increasing complexity | Mode and level indicator in the top-right corner | `components/Difficulty.js`, `src/main.js` |
+| Increasing complexity | Difficulty grows with the time survived (one level every 20 seconds), not the score, so kills and combos never make the run harder | `components/Difficulty.js`, `src/main.js` |
 | Game world | Grassy texture painted over the checkerboard | `components/Map.js` |
 | Game world | Trees and rocks built from simple shapes, which block movement like houses | `components/Scenery.js`, `components/Map.js` |
+| Game world | A steeper camera, and houses, trees and rocks between the camera and Tode turn see-through, so they never hide Tode or an enemy | `components/Camera.js`, `components/Map.js` |
 | Roguelite | Coins earned each run (the score times the coin bonus) buy permanent base upgrades in the menu shop. See [Base upgrades](#base-upgrades-shop) | `components/Shop.js`, `src/main.js` |
 | Roguelite | XP from kills and survival; every level up pauses the run to pick 1 of 3 random in-game upgrades that last until game over. See [In-game upgrades](#in-game-upgrades-level-up) | `components/RunUpgrades.js`, `src/main.js` |
 | Roguelite | Shields absorb a hit and knock out nearby enemies; XP bar and shield count in the top-left corner | `src/main.js`, `src/style.css` |
@@ -109,8 +115,8 @@ Each attack's damage is set against how it hits, so no attack is best everywhere
 
 ### Health scaling
 
-Enemy health grows with the difficulty factor (`score × 0.005`) at half the rate of enemy speed:
-health multiplier = `1 + factor × 0.5`, capped at 3×. So at score 100 new enemies have 1.25× health
+Enemy health grows with the difficulty factor (`seconds survived × 0.005`) at half the rate of enemy speed:
+health multiplier = `1 + factor × 0.5`, capped at 3×. So after 100 seconds new enemies have 1.25× health
 (Classic: 13, so the Shockwave now needs 2 hits). The health is rounded and fixed when an enemy spawns.
 Attack damage does not grow with difficulty; the damage upgrades below are how you keep up.
 
@@ -232,7 +238,7 @@ The beat track and attack meter move up to make room. The attack button hides fo
 
 - On-beat play costs no attack speed (the cooldown lines up with the beat), so the bonuses are kept small: ×1.4 damage at most.
   A Perfect Spit deals 9.8, just short of one-shotting a fresh Classic enemy (10 health), so Spit still needs aim and timing.
-  A Perfect Shockwave (14) still one-shots Classic enemies up to score 100 (13 health), but Hunter enemies (18) still take 2 hits.
+  A Perfect Shockwave (14) still one-shots Classic enemies for the first 100 seconds (13 health), but Hunter enemies (18) still take 2 hits.
 - The combo bonus tops out at ×2 instead of ×3, so rhythm runs don't make the old best scores unreachable.
 - The timing windows are tighter (45 / 90 ms instead of 50 / 110 ms), because at 160 BPM a 110 ms window covered more than half of every beat.
 
