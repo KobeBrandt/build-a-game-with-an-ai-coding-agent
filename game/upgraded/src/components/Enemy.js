@@ -64,7 +64,7 @@ function createHealthBar() {
 const loader = new GLTFLoader();
 // Resolves once enemies can be spawned
 export const enemyReady = new Promise((resolve) => {
-  loader.load('/models/enemy.glb', (gltf) => {
+  loader.load(import.meta.env.BASE_URL + 'models/enemy.glb', (gltf) => {
     setUpTemplate(gltf);
     resolve();
   });

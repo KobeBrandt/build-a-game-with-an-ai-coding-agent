@@ -14,6 +14,23 @@ npm run dev:upgraded
 This starts the normal Vite dev server and opens `/upgraded/`. The upgraded game shares
 `game/public` (models) and `game/node_modules` with the original game.
 
+## Deploy to GitHub Pages
+
+From the `game` directory:
+
+```bash
+npm run build:upgraded
+```
+
+This builds a static copy of the upgraded game into `game/dist-upgraded` (git-ignored), using
+`upgraded/vite.config.js`. The build uses a relative base (`./`), and the game loads its models and
+images through `import.meta.env.BASE_URL`, so the site works under any path, such as
+`https://<user>.github.io/<repo>/`. Check the build locally with `npm run preview:upgraded`.
+
+The workflow [`.github/workflows/deploy-upgraded.yml`](../../.github/workflows/deploy-upgraded.yml)
+runs this build and publishes `game/dist-upgraded` on every push to `main` (or by hand from the
+Actions tab). To turn it on once, set **Settings > Pages > Source** to **GitHub Actions**.
+
 ## Upgrades by course task
 
 | Course task | Upgrade | Where |
@@ -43,6 +60,7 @@ This starts the normal Vite dev server and opens `/upgraded/`. The upgraded game
 | Controls | WASD as well as the arrow keys; `A`/`D` change the mode in the menu | `components/Player.js`, `src/main.js` |
 | UI | Menus and HUD in the game world's style: checkerboard grass panel, white wall blocks with dark green sides, red roof buttons and a light sky haze over the world. See [Game-world UI](#game-world-ui) | `index.html`, `src/main.js`, `src/style.css` |
 | Accessibility | WCAG 2.2 and Game Accessibility Guidelines pass over the menus and HUD. See [Accessibility](#accessibility) | `index.html`, `src/main.js`, `src/style.css` |
+| Deploy | Static GitHub Pages build that works under any repository path. See [Deploy to GitHub Pages](#deploy-to-github-pages) | `vite.config.js`, `../package.json`, `../../.github/workflows/deploy-upgraded.yml`, `components/Enemy.js`, `components/House.js`, `components/Player.js`, `src/main.js` |
 
 ## Attacks
 

@@ -7,7 +7,9 @@
     "dev": "vite",
     "dev:upgraded": "vite --open /upgraded/",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "build:upgraded": "vite build --config upgraded/vite.config.js",
+    "preview:upgraded": "vite preview --config upgraded/vite.config.js"
   },
   "devDependencies": {
     "vite": "^7.2.4"

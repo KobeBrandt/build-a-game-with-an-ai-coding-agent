@@ -14,7 +14,7 @@ let template = null;
 // Resolves once the house model is loaded; chunks wait on it before placing houses
 export const houseTemplateReady = new Promise((resolve) => {
   const loader = new GLTFLoader();
-  loader.load('/models/small_house.glb', (gltf) => {
+  loader.load(import.meta.env.BASE_URL + 'models/small_house.glb', (gltf) => {
     template = gltf.scene;
     template.scale.setScalar(HOUSE_SCALE);
     template.rotation.x = Math.PI / 2;
