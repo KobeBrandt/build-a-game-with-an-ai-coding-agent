@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { damageEnemy } from './Enemy.js';
 import { getFacing } from './Player.js';
 import { isTouching, overlapsObstacle } from './Collision.js';
-import { getSixteenth, judge, registerJudgement } from './Rhythm.js';
+import { getBeatCooldown, getSixteenth, GREAT_WINDOW, judge, registerJudgement } from './Rhythm.js';
 import { SFX } from './Audio.js';
 
 // Attacks the player picks from on the start and game over screens.
@@ -15,7 +15,7 @@ import { SFX } from './Audio.js';
 // - Spit pierces a whole line of enemies, so it sits in between.
 export const ATTACKS = [
   { id: 'shockwave', name: 'Shockwave', description: 'Space: hit everything around you', cooldown: 1, damage: 10, auto: false },
-  { id: 'tongue', name: 'Tongue', description: 'Auto: lashes the nearest enemy', cooldown: 0.5, damage: 6, auto: true },
+  { id: 'tongue', name: 'Tongue', description: 'Auto: lashes the nearest enemy', cooldown: 0.55, damage: 6, auto: true },
   { id: 'spit', name: 'Spit', description: 'Space: piercing shot ahead', cooldown: 0.7, damage: 7, auto: false },
 ];
 
@@ -39,6 +39,11 @@ const SPIT_SPEED = 450; // world units per second
 const SPIT_RANGE = 320; // base distance a glob flies before it pops
 const SPIT_RADIUS = 7;
 const SPIT_HEIGHT = 10;
+
+// A press this close to the end of the cooldown is kept and fires the moment the attack is ready,
+// so pressing on the beat a little early (still a Great) isn't lost to the cooldown
+const PRESS_BUFFER = GREAT_WINDOW + 0.03;
+const STEP_TOLERANCE = 0.05; // seconds; see the Tongue in updateAttack
 
 const ATTACK_KEY = 'tode-attack';
 
@@ -129,7 +134,13 @@ export function setAttackDifficulty(newCooldownMultiplier, radiusMultiplier, new
   attackCircle.scale.setScalar(radiusMultiplier);
 }
 
-const attackCooldown = () => currentAttack.cooldown * cooldownMultiplier;
+/**
+ * The attack's cooldown in seconds from its base value, upgrades and difficulty.
+ * Rhythm.js sets the music's tempo from it.
+ */
+export const getRawCooldown = () => currentAttack.cooldown * cooldownMultiplier;
+// While the music plays, the cooldown is locked to a whole number of beats (see Rhythm.js)
+const attackCooldown = () => getBeatCooldown(getRawCooldown(), currentAttack.auto);
 const attackDamage = () => currentAttack.damage * damageMultiplier;
 
 let cooldownRemaining = 0;
@@ -151,6 +162,8 @@ const globs = [];
 /**
  * Share of the cooldown already recovered: 0 right after an attack, 1 when ready again.
  */
+export const getCooldownRemaining = () => cooldownRemaining;
+
 export function getAttackReadiness() {
   const cooldown = attackCooldown();
   return cooldown > 0 ? 1 - cooldownRemaining / cooldown : 1;
@@ -279,27 +292,33 @@ export function updateAttack(scene, delta, player, enemies) {
   const onStep = step === null || step !== lastTongueStep;
   lastTongueStep = step;
 
-  if (cooldownRemaining === 0) {
-    if (currentAttack.id === 'tongue') {
-      // The tongue fires on its own as soon as an enemy is in reach, on the next 16th note
-      const target = onStep ? findTongueTarget(player, enemies) : null;
-      if (target) {
-        cooldownRemaining = attackCooldown();
-        kills += lashTongue(scene, player, target);
-      }
-    } else if (attackRequested) {
+  if (currentAttack.id === 'tongue') {
+    // The tongue fires on its own as soon as an enemy is in reach, on the next 16th note.
+    // A cooldown of whole 16ths ends a frame or so after its 16th starts, so allow that much.
+    const tolerance = step === null ? 0 : STEP_TOLERANCE;
+    const target = onStep && cooldownRemaining <= tolerance ? findTongueTarget(player, enemies) : null;
+    if (target) {
       cooldownRemaining = attackCooldown();
+      kills += lashTongue(scene, player, target);
+    }
+  } else if (cooldownRemaining === 0) {
+    if (attackRequested) {
       // An attack pressed on the beat hits harder and counts towards the combo
       const judgement = judge(attackPressTime);
       registerJudgement(judgement);
       const damage = attackDamage() * (judgement?.damage ?? 1);
       const onBeat = judgement !== null && judgement.grade !== 'miss';
+      // On the beat, the cooldown counts from the beat itself, not from the press or this frame,
+      // so the attack is ready again exactly on a later beat
+      const sinceBeat = onBeat ? judgement.offset + (performance.now() - attackPressTime) / 1000 : 0;
+      cooldownRemaining = Math.max(0, attackCooldown() - sinceBeat);
+      attackRequested = false;
       if (currentAttack.id === 'spit') shootSpit(scene, player, damage);
       else kills += fireShockwave(scene, player, enemies, damage, onBeat);
     }
   }
-  // Presses during cooldown are dropped, not buffered
-  attackRequested = false;
+  // Presses during cooldown are dropped, except right before it ends (see PRESS_BUFFER)
+  if (cooldownRemaining > PRESS_BUFFER || currentAttack.auto) attackRequested = false;
 
   kills += updateGlobs(scene, delta, enemies);
 

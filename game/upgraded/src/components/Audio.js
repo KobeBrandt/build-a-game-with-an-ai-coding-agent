@@ -1,7 +1,8 @@
 // Music and sound effects, all synthesised with the Web Audio API (no sound files to load).
 // The music is a 4-bar loop on the classic vi-IV-I-V progression (Am, F, C, G). It is the beat
 // clock for the rhythm system in Rhythm.js: every beat time comes from the audio clock, so the
-// beat the player sees and the beat they hear never drift apart.
+// beat the player sees and the beat they hear never drift apart. The tempo can change during a run
+// (Rhythm.js sets it from the attack's cooldown); a new tempo starts on the next bar.
 
 const MUTE_KEY = 'tode-muted';
 const MASTER_VOLUME = 0.5;
@@ -47,8 +48,13 @@ let noiseBuffer = null;
 // Music state for the current run
 let musicBus = null;
 let bpm = 120;
-let songStart = 0; // audio time of beat 0
+let pendingBpm = null; // tempo that starts on the next bar
+// Tempo changes so far: { time, beat, bpm } from `time` (audio seconds) on, starting at `beat`.
+// Kept so the audio the player hears now (a little behind the scheduler) is still timed right.
+const tempoSegments = [];
+const MAX_SEGMENTS = 4;
 let nextStep = 0; // next 16th step to schedule
+let nextStepTime = 0; // audio time of that step
 let schedulerId = null;
 let intensity = 1; // 1 = drums and bass, 2 = + snare and arpeggio, 3 = + lead
 
@@ -113,8 +119,41 @@ export function audibleTime(performanceTime = performance.now()) {
 
 // Beat clock for Rhythm.js
 export const isMusicPlaying = () => musicBus !== null && context.state === 'running';
-export const getSongStart = () => songStart;
-export const getSecondsPerBeat = () => 60 / bpm;
+
+function segmentAt(time) {
+  for (let i = tempoSegments.length - 1; i > 0; i--) {
+    if (tempoSegments[i].time <= time) return tempoSegments[i];
+  }
+  return tempoSegments[0];
+}
+
+/**
+ * Beats since the song started (a float) at audio time `time`.
+ */
+export function beatAtTime(time) {
+  const segment = segmentAt(time);
+  return segment.beat + ((time - segment.time) * segment.bpm) / 60;
+}
+
+/**
+ * Length of a beat in seconds at audio time `time` (default: what is playing now).
+ */
+export function getSecondsPerBeat(time = audibleTime()) {
+  if (time === null || tempoSegments.length === 0) return 60 / bpm;
+  return 60 / segmentAt(time).bpm;
+}
+
+/**
+ * Tempo the player hears right now, in beats per minute.
+ */
+export const getBpm = () => 60 / getSecondsPerBeat();
+
+/**
+ * Ask for a new tempo; it starts on the next bar, so the music never stumbles mid-bar.
+ */
+export function setTempo(newBpm) {
+  pendingBpm = newBpm === bpm ? null : newBpm;
+}
 
 export function setMusicIntensity(level) {
   intensity = level;
@@ -201,10 +240,16 @@ function scheduleStep(step, time) {
 }
 
 function runScheduler() {
-  const stepLength = 60 / bpm / STEPS_PER_BEAT;
-  while (songStart + nextStep * stepLength < context.currentTime + LOOKAHEAD) {
-    scheduleStep(nextStep, songStart + nextStep * stepLength);
+  while (nextStepTime < context.currentTime + LOOKAHEAD) {
+    if (pendingBpm !== null && nextStep % STEPS_PER_BAR === 0) {
+      bpm = pendingBpm;
+      pendingBpm = null;
+      tempoSegments.push({ time: nextStepTime, beat: nextStep / STEPS_PER_BEAT, bpm });
+      if (tempoSegments.length > MAX_SEGMENTS) tempoSegments.shift();
+    }
+    scheduleStep(nextStep, nextStepTime);
     nextStep++;
+    nextStepTime += 60 / bpm / STEPS_PER_BEAT;
   }
 }
 
@@ -216,12 +261,15 @@ export function startMusic(newBpm) {
   stopMusic();
   context.resume();
   bpm = newBpm;
+  pendingBpm = null;
   intensity = 1;
   musicBus = context.createGain();
   musicBus.gain.value = MUSIC_VOLUME;
   musicBus.connect(master);
-  songStart = context.currentTime + START_DELAY;
+  nextStepTime = context.currentTime + START_DELAY;
   nextStep = 0;
+  tempoSegments.length = 0;
+  tempoSegments.push({ time: nextStepTime, beat: 0, bpm });
   schedulerId = setInterval(runScheduler, SCHEDULE_INTERVAL);
   runScheduler();
 }
@@ -264,8 +312,8 @@ function play(callback, name = null) {
 
 // Pitch of chord tone `index` in the current bar, so SFX stay in key with the music
 function chordTone(index, octave = 1) {
-  const now = audibleTime() ?? 0;
-  const bar = Math.max(0, Math.floor((now - songStart) / ((60 / bpm) * 4)));
+  const now = audibleTime();
+  const bar = now === null || tempoSegments.length === 0 ? 0 : Math.max(0, Math.floor(beatAtTime(now) / 4));
   const { tones } = CHORDS[bar % CHORDS.length];
   return midiToHz(tones[index % tones.length] + 12 * octave);
 }

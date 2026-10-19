@@ -26,6 +26,8 @@ import {
   cycleAttack,
   getAttack,
   getAttackReadiness,
+  getCooldownRemaining,
+  getRawCooldown,
   resetAttack,
   setAttackById,
   setAttackDifficulty,
@@ -62,6 +64,7 @@ import {
 import { isMuted, pauseAudio, resumeAudio, setMusicIntensity, SFX, stopMusic, toggleMute } from './components/Audio.js';
 import {
   beatRing,
+  followCooldown,
   getBeatPulse,
   getComboMultiplier,
   getRhythmStats,
@@ -168,7 +171,7 @@ function modeListHtml() {
     (mode) => `
       <li>
         <button type="button" data-mode="${mode.key}" aria-pressed="${mode === current}">
-          <kbd>${mode.key}</kbd> ${mode.name} <small>${mode.description} &middot; ${mode.bpm} BPM</small>
+          <kbd>${mode.key}</kbd> ${mode.name} <small>${mode.description}</small>
         </button>
       </li>`
   ).join('');
@@ -197,7 +200,7 @@ const CONTROLS_HTML = `
     &middot; <kbd>P</kbd> pause
     &middot; <kbd>M</kbd> sound
   </p>
-  <p class="controls rhythm-tip">Hop and attack on the beat for combos: on-beat attacks hit harder, and combos multiply kill points (up to &times;3)</p>`;
+  <p class="controls rhythm-tip">Hop and attack on the beat for combos: on-beat attacks hit harder, and combos multiply kill points (up to &times;2). The beat follows your attack's cooldown, so faster attacks mean faster music</p>`;
 
 function shopHtml() {
   const items = BASE_UPGRADES.map((upgrade, index) => {
@@ -392,7 +395,9 @@ function startGame() {
   resetEnemies(scene);
   resetAttack(scene);
   resetScore();
-  startRhythm(getMode().bpm);
+  // The music's tempo comes from the attack's starting cooldown, so set the run's stats first
+  applyDifficulty(0);
+  startRhythm(getRawCooldown(), getAttack().auto);
   announcedLevel = getLevel(0);
   player.visible = true;
   state = 'playing';
@@ -667,7 +672,10 @@ function updateHud() {
   shieldsElement.textContent = `Shields: ${shields}`;
   shieldsElement.classList.toggle('empty', shields === 0);
 
-  updateRhythmHud(state === 'playing' || state === 'levelup' || state === 'paused');
+  updateRhythmHud(
+    state === 'playing' || state === 'levelup' || state === 'paused',
+    attack.auto ? null : getCooldownRemaining()
+  );
   const bob = reducedMotion.matches ? 0 : getBeatPulse() * ENEMY_BOB_HEIGHT;
   for (const enemy of enemies) enemy.position.z = bob;
 }
@@ -683,6 +691,7 @@ renderer.setAnimationLoop(() => {
 
   if (state === 'playing') {
     applyDifficulty(getScore());
+    followCooldown(getRawCooldown(), getAttack().auto);
 
     const playerHit = updatePlayer(delta);
     const enemyHit = playerHit || updateEnemies(scene, delta, player);

@@ -159,23 +159,53 @@ In-game upgrades multiply: for example two Swift Hops picks give `1.1 × 1.1` = 
 ## Rhythm and sound
 
 Every run plays a synthesised synth-pop loop (Am, F, C, G) made with the Web Audio API, so there are no sound files.
-Each mode has its own tempo: Classic 120 BPM, Horde 136 BPM, Hunter 104 BPM. More layers join the music as the
-level rises: drums and bass at level 1, snare and arpeggio from level 2, a lead melody from level 4.
+More layers join the music as the level rises: drums and bass at level 1, snare and arpeggio from level 2, a lead melody from level 4.
 The beat clock is the audio clock itself, so what you see and what you hear stay in time, and pausing freezes both.
+
+### The beat follows the attack
+
+The tempo comes from the chosen attack's cooldown, and the cooldown is measured in beats:
+
+- The tempo is set so the cooldown is a whole power-of-two number of beats (1, 2, 4...), between 80 and 160 BPM.
+  An attack fired on the beat is ready again exactly on a later beat, so you can keep attacking on the beat.
+- The cooldown upgrades (shop and level up) and the difficulty shorten the cooldown, so they speed the music up.
+  A new tempo starts on the next bar. When it would pass 160 BPM it drops to half time (80 BPM), and the cooldown is then half as many beats.
+- Shockwave and Spit cooldowns last at least 1 beat. When even that would need more than 160 BPM, the tempo stays at 160 and the cooldown at 1 beat.
+  The Tongue fires on its own, on 16th notes, so its cooldown can go down to a 16th note.
+- When an attack fires on the beat, its cooldown counts from that beat, not from the key press.
+  A press up to 0.12 s before the cooldown ends is kept and fires the moment the attack is ready, so an early press that is still on the beat isn't lost.
+- On the beat track, tall teal markers show the beats the attack will be ready on.
+
+| Attack | Base cooldown | Starting tempo | Cooldown in beats |
+| --- | --- | --- | --- |
+| Shockwave | 1 s | 120 BPM | 2 |
+| Spit | 0.7 s | 86 BPM | 1 |
+| Tongue | 0.55 s | 109 BPM | 1 |
+
+Without audio (no Web Audio support), the cooldowns are the plain seconds and there is no beat.
+
+### Judging and combo
 
 | Element | What it does |
 | --- | --- |
-| Beat track | Bottom of the screen, above the attack meter: markers slide in from both sides and meet in the target on every beat |
+| Beat track | Bottom of the screen, above the attack meter: markers slide in from both sides and meet in the target on every beat. It also shows the current tempo |
 | Beat ring | A teal ring under Tode pulses on every beat; enemies bob to the beat (not with reduced motion) |
-| Judgement | Each hop key press and each Shockwave or Spit is judged against the nearest beat: **Perfect** (within 50 ms), **Great** (within 110 ms) or **Off beat** |
+| Judgement | Each hop key press and each Shockwave or Spit is judged against the nearest beat: **Perfect** (within 45 ms), **Great** (within 90 ms) or **Off beat** |
 | Combo | Perfect and Great add 1 (once per beat, so pressing every key on one beat doesn't pad it). Off beat resets it. It also fades after 8 beats of play without an on-beat press |
-| Combo bonus | Kill points × (1 + 0.05 per combo), up to ×3 at combo 40 |
-| On-beat damage | A Perfect attack deals ×1.5 damage, a Great one ×1.25. A Shockwave on the beat turns teal |
-| Tongue | Lashes on the music's 16th notes (base cooldown 0.5 s, was 0.55 s, to keep the same damage per second) |
+| Combo bonus | Kill points × (1 + 0.05 per combo), up to ×2 at combo 20 |
+| On-beat damage | A Perfect attack deals ×1.4 damage, a Great one ×1.2. A Shockwave on the beat turns teal |
 | Sound effects | Hop, each attack, hit, kill, shield, level up, game over and judgement chimes; the chimes and kill blips use the notes of the current chord |
 | Game over | Shows the best combo and number of Perfects |
 
-The rhythm is optional: playing off the beat only loses the combo bonus.
+### Balance notes
+
+- On-beat play costs no attack speed (the cooldown lines up with the beat), so the bonuses are kept small: ×1.4 damage at most.
+  A Perfect Spit deals 9.8, just short of one-shotting a fresh Classic enemy (10 health), so Spit still needs aim and timing.
+  A Perfect Shockwave (14) still one-shots Classic enemies up to score 100 (13 health), but Hunter enemies (18) still take 2 hits.
+- The combo bonus tops out at ×2 instead of ×3, so rhythm runs don't make the old best scores unreachable.
+- The timing windows are tighter (45 / 90 ms instead of 50 / 110 ms), because at 160 BPM a 110 ms window covered more than half of every beat.
+
+The rhythm is optional: playing off the beat only loses the combo and damage bonuses.
 Press `M` on any screen to turn the sound off or on (saved in `localStorage` key `tode-muted`).
 
 ## Game-world UI

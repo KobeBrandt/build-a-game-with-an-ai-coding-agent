@@ -608,8 +608,19 @@ kbd {
 }
 
 .beat-marker {
+  top: 6px;
   width: 6px;
+  height: 10px;
   margin-left: -3px;
+  background: var(--wall-side);
+}
+
+/* Beats the attack is ready on: tall teal markers, so the cooldown can be read off the track */
+.beat-marker.attack {
+  top: 2px;
+  width: 8px;
+  height: 18px;
+  margin-left: -4px;
   background: var(--beat-deep);
 }
 
@@ -633,9 +644,18 @@ kbd {
   }
 }
 
-.beat-combo {
+.beat-info {
+  display: flex;
+  gap: 12px;
   font-size: 0.9375rem;
+}
+
+.beat-combo {
   font-weight: 600;
+}
+
+.beat-bpm {
+  font-weight: 500;
 }
 
 /* "Perfect!" pops up above the track in outlined block letters, like the title */
